@@ -27,8 +27,8 @@ func presetsRoutes(mux *http.ServeMux) {
 		s := presets.Load()
 		writeJSON(rw, map[string]any{
 			"presets": presets.All(),
-			"agents":  s.Agents,
 			"default": s.Default,
+			"exclude": s.Exclude,
 			"kinds":   presets.Kinds,
 			"isolate": presets.Isolates(),
 			// the agents magpie knows, so a binding names one
@@ -86,24 +86,29 @@ func presetsRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(rw, map[string]bool{"ok": true})
 	})
-	// which preset an agent gets ("" the default), or the default itself
-	mux.HandleFunc("POST /api/presets/bind", func(rw http.ResponseWriter, r *http.Request) {
+	// the preset every agent gets, and the agents left out of it
+	mux.HandleFunc("POST /api/presets/default", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Preset string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := presets.SetDefault(in.Preset); err != nil {
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(rw, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/presets/exclude", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
-			Agent   string `json:"agent"`
-			Preset  string `json:"preset"`
-			Default bool   `json:"default"`
+			Agent    string `json:"agent"`
+			Excluded bool   `json:"excluded"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(rw, err.Error(), http.StatusBadRequest)
 			return
 		}
-		var err error
-		if in.Default {
-			err = presets.SetDefault(in.Preset)
-		} else {
-			err = presets.Bind(in.Agent, in.Preset)
-		}
-		if err != nil {
+		if err := presets.Exclude(in.Agent, in.Excluded); err != nil {
 			http.Error(rw, err.Error(), http.StatusBadRequest)
 			return
 		}

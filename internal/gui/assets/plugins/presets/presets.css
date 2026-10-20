@@ -27,3 +27,21 @@
 .pr-bindrow select { min-width: 0; width: 100%; }
 .pr-err { color: var(--err, #d9534f); font-size: 12px; }
 .pr-note { font-size: 11px; opacity: .65; }
+/* a gateway plugin's card: its address, what it has answered, its health */
+.pr-card .pr-field { display: flex; flex-direction: column; gap: 4px; }
+.pr-sec > label { display: block; font-size: 12px; font-weight: 600; margin-top: 10px; color: var(--fg-2); }
+.pr-sec > .pr-field input:not([type="checkbox"]), .pr-sec > .pr-field select, .pr-sec > .pr-field textarea,
+.pr-sec .pr-field > input, .pr-sec .pr-field > select {
+  height: 27px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg); font-size: 12.5px; outline: none; width: 100%;
+  transition: border-color .12s, box-shadow .12s;
+}
+.pr-sec textarea { height: auto; padding: 7px 9px; font-family: var(--code); font-size: 12px; line-height: 1.5; resize: vertical; }
+.pr-sec .pr-field > input:focus, .pr-sec .pr-field > select:focus, .pr-sec textarea:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.pr-sec input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--accent); }
+.pr-sec > .pr-field { margin-bottom: 4px; }
+.pr-sec .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.pr-sec .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--pill); color: var(--fg-2); cursor: pointer; }
+.pr-sec .chip:hover { color: var(--fg); border-color: var(--muted); }

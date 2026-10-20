@@ -247,7 +247,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	if err := Put(edited); err != nil {
 		t.Fatal(err)
 	}
-	if err := Bind("claude-code", "mine"); err != nil {
+	if err := Exclude("codex", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := SetDefault("standard"); err != nil {
@@ -265,14 +265,22 @@ func TestStoreRoundTrip(t *testing.T) {
 	if s.Builtin["standard"].Sub != "edited" {
 		t.Fatalf("builtin edit %+v", s.Builtin)
 	}
-	if s.Agents["claude-code"] != "mine" || s.Default != "standard" {
-		t.Fatalf("bindings %+v", s)
+	if s.Default != "standard" || !s.Excluded("codex") || s.Excluded("claude-code") {
+		t.Fatalf("store %+v", s)
 	}
-	if p, ok := For("claude-code"); !ok || p.ID != "mine" {
+	// one preset serves every agent that isn't left out
+	if p, ok := For("claude-code"); !ok || p.ID != "standard" {
 		t.Fatalf("For(claude-code) = %+v", p)
 	}
-	if p, ok := For("codex"); !ok || p.ID != "standard" {
-		t.Fatalf("For(codex) = %+v", p)
+	if _, ok := For("codex"); ok {
+		t.Fatal("an excluded agent got a preset")
+	}
+	// Standard is what magpie does out of the box
+	if err := SetDefault(""); err != nil {
+		t.Fatal(err)
+	}
+	if p, ok := For("claude-code"); !ok || p.ID != Standard {
+		t.Fatalf("the default isn't Standard: %+v", p)
 	}
 
 	// a built-in can't be removed; a user's can, and nothing points at it

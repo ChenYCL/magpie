@@ -6,6 +6,7 @@ import (
 	_ "github.com/yetone/magpie/plugins/budget"
 	_ "github.com/yetone/magpie/plugins/gateway"
 	_ "github.com/yetone/magpie/plugins/groups"
+	_ "github.com/yetone/magpie/plugins/gwplugins"
 	_ "github.com/yetone/magpie/plugins/library"
 	_ "github.com/yetone/magpie/plugins/middleware"
 	_ "github.com/yetone/magpie/plugins/otel"

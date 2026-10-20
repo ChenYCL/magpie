@@ -2,6 +2,7 @@ package presets
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -13,11 +14,15 @@ import (
 // the edits of the built-ins, and which preset each agent gets.
 //
 //	{
-//	  "custom":   [Preset…],                  // the user's, builtin false
-//	  "builtin":  {"standard": {Patch…}},      // an edit of a built-in, by id
-//	  "agents":   {"claude-code": "standard"}, // the preset an agent gets
-//	  "default":  "standard"                   // the fallback, too
+//	  "custom":  [Preset…],                  // the user's, builtin false
+//	  "builtin": {"standard": {Patch…}},      // an edit of a built-in, by id
+//	  "default": "standard",                  // the preset every agent gets
+//	  "exclude": ["codex"]                    // the agents that get none
 //	}
+//
+// One preset serves every agent: a preset is what the user wants their
+// agents to behave like, not a per-agent setting. An agent that must keep
+// its requests as they are is named in Exclude, and gets no preset at all.
 //
 // A built-in edited keeps its identity and its patches' order: the edit
 // replaces what it has, and Reset puts the shipped one back. Nothing here
@@ -34,9 +39,16 @@ func Path() string { return filepath.Join(appdir.Config(), File) }
 type Store struct {
 	Custom  []Preset          `json:"custom,omitempty"`
 	Builtin map[string]Preset `json:"builtin,omitempty"`
-	Agents  map[string]string `json:"agents,omitempty"`
-	Default string            `json:"default,omitempty"`
+	// Default is the preset every agent gets. Empty is Standard, which is
+	// what magpie does out of the box.
+	Default string `json:"default,omitempty"`
+	// Exclude are the agents that get no preset: the ones whose requests
+	// must go out as they came.
+	Exclude []string `json:"exclude,omitempty"`
 }
+
+// Standard is the preset magpie serves every agent with out of the box.
+const Standard = "standard"
 
 var (
 	mu    sync.Mutex
@@ -145,9 +157,19 @@ func Get(id string) (Preset, bool) {
 	return Preset{}, false
 }
 
-// For is the preset an agent gets: the one set for it, else the default,
-// else the first built-in — nil only when magpie has no presets at all.
+// For is the preset an agent gets: the default one (Standard when the user
+// hasn't picked another), or none when the agent is excluded.
 func For(agent string) (Preset, bool) {
+	s := Load()
+	if agent != "" && s.Excluded(agent) {
+		return Preset{}, false
+	}
+	return Default()
+}
+
+// Default is the preset every agent gets: the one the user picked, else
+// Standard, else the first the user has left on.
+func Default() (Preset, bool) {
 	s := Load()
 	list := All()
 	if len(list) == 0 {
@@ -157,12 +179,11 @@ func For(agent string) (Preset, bool) {
 	for _, p := range list {
 		byID[p.ID] = p
 	}
-	if id := s.Agents[agent]; id != "" {
-		if p, ok := byID[id]; ok && !p.Disabled {
-			return p, true
-		}
+	id := s.Default
+	if id == "" {
+		id = Standard
 	}
-	if p, ok := byID[s.Default]; ok && !p.Disabled {
+	if p, ok := byID[id]; ok && !p.Disabled {
 		return p, true
 	}
 	for _, p := range list {
@@ -173,31 +194,40 @@ func For(agent string) (Preset, bool) {
 	return Preset{}, false
 }
 
-// Bind sets the preset an agent gets; "" falls back to the default.
-func Bind(agent, id string) error {
+// Excluded says the agent gets no preset.
+func (s Store) Excluded(agent string) bool {
+	for _, a := range s.Exclude {
+		if a == agent {
+			return true
+		}
+	}
+	return false
+}
+
+// Exclude leaves an agent out of the preset every other agent gets, or
+// puts it back.
+func Exclude(agent string, excluded bool) error {
+	if agent == "" {
+		return errors.New("an agent is needed: name the one to leave out")
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	s := load()
-	if id != "" {
-		found := false
-		for _, p := range allOf(s) {
-			if p.ID == id && !p.Disabled {
-				found = true
-				break
+	out := make([]string, 0, len(s.Exclude)+1)
+	had := false
+	for _, a := range s.Exclude {
+		if a == agent {
+			had = true
+			if !excluded {
+				continue
 			}
 		}
-		if !found {
-			return errNoPreset(id)
-		}
+		out = append(out, a)
 	}
-	if s.Agents == nil {
-		s.Agents = map[string]string{}
+	if excluded && !had {
+		out = append(out, agent)
 	}
-	if id == "" {
-		delete(s.Agents, agent)
-	} else {
-		s.Agents[agent] = id
-	}
+	s.Exclude = out
 	cache = nil
 	return write(s)
 }
@@ -293,11 +323,6 @@ func Remove(id string) error {
 	// nothing points at a preset that is gone
 	if s.Default == id {
 		s.Default = ""
-	}
-	for k, v := range s.Agents {
-		if v == id {
-			delete(s.Agents, k)
-		}
 	}
 	cache = nil
 	return write(s)

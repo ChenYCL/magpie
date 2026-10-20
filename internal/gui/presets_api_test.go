@@ -19,8 +19,8 @@ func TestPresetsRoutes(t *testing.T) {
 
 	type page struct {
 		Presets []presets.Preset `json:"presets"`
-		Agents  map[string]string `json:"agents"`
-		Default string            `json:"default"`
+		Default string           `json:"default"`
+		Exclude []string         `json:"exclude"`
 		Known   []struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
@@ -87,18 +87,24 @@ func TestPresetsRoutes(t *testing.T) {
 		t.Fatalf("a bad patch: %d %s", w.Code, w.Body)
 	}
 
-	// bound to an agent, and the default
-	request("POST", "/api/presets/bind", `{"agent":"claude-code","preset":"mine"}`, nil)
-	request("POST", "/api/presets/bind", `{"default":true,"preset":"standard"}`, nil)
+	// one preset for every agent, and the agents left out of it
+	request("POST", "/api/presets/default", `{"preset":"mine"}`, nil)
+	request("POST", "/api/presets/exclude", `{"agent":"codex","excluded":true}`, nil)
 	request("GET", "/api/presets", "", &p)
-	if p.Agents["claude-code"] != "mine" || p.Default != "standard" {
-		t.Fatalf("bindings %+v", p)
+	if p.Default != "mine" || len(p.Exclude) != 1 || p.Exclude[0] != "codex" {
+		t.Fatalf("store %+v", p)
 	}
-	// a preset magpie doesn't have can't be bound
+	// a preset magpie doesn't have can't be the default
 	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/presets/bind", strings.NewReader(`{"agent":"x","preset":"nope"}`)))
+	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/presets/default", strings.NewReader(`{"preset":"nope"}`)))
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("bound to nothing: %d", w.Code)
+		t.Fatalf("defaulted to nothing: %d", w.Code)
+	}
+	// an agent left out goes back in
+	request("POST", "/api/presets/exclude", `{"agent":"codex","excluded":false}`, nil)
+	request("GET", "/api/presets", "", &p)
+	if len(p.Exclude) != 0 {
+		t.Fatalf("still left out: %+v", p.Exclude)
 	}
 
 	// a copy of a built-in is the user's, and resettable/removable

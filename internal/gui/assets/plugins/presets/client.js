@@ -12,6 +12,11 @@ magpie.plugin("presets", (ctx) => {
   let draft = null;       // the preset being edited (a copy)
   let trying = null;      // { proto, body, out, stats } of the Try panel
   let err = "";
+  let tab = "presets";    // "presets" or "plugins"
+  let plugins = null;     // GET /api/gateway-plugins
+  let pdraft = null;      // a gateway plugin being edited
+  let ptest = null;       // { body, out, error } of a plugin's Try
+  let pknown = [];
 
   const KINDS = { prompt: "Prompt", context: "Context", tools: "Tools" };
   const ACTIONS = {
@@ -330,7 +335,19 @@ magpie.plugin("presets", (ctx) => {
     if (!root) return;
     root.replaceChildren();
     const head = el("div", "pr-head");
-    head.append(el("div", "segs", t("Presets")));
+    const tabs = el("div", "segs");
+    for (const [id, name] of [["presets", t("Preset")], ["plugins", t("Gateway plugins")]]) {
+      const b = el("button", "opt" + (tab === id ? " on" : ""), name);
+      b.type = "button";
+      b.onclick = () => {
+        tab = id;
+        draft = null;
+        render();
+        if (id === "plugins" && !plugins) loadPlugins();
+      };
+      tabs.append(b);
+    }
+    head.append(tabs);
     head.append(el("span", "grow"));
     const reload = el("button", "text sm", "↻");
     reload.type = "button";
@@ -338,6 +355,10 @@ magpie.plugin("presets", (ctx) => {
     reload.onclick = () => load();
     head.append(reload);
     root.append(head);
+    if (tab === "plugins") {
+      root.append(pluginsPane());
+      return;
+    }
     root.append(el("p", "pr-note", t("Presets decide which prompt, context files and tools an agent's requests carry. A preset is a list of patches: nothing runs, a request is edited.")));
     const grid = el("div", "pr-grid");
     for (const p of presets()) grid.append(card(p));
@@ -349,11 +370,194 @@ magpie.plugin("presets", (ctx) => {
     if (err) root.append(el("p", "pr-err", err));
   }
 
+  // ---- gateway plugins: programs of the user's own on every request -------
+
+  async function loadPlugins() {
+    err = "";
+    try {
+      plugins = await api("gateway-plugins");
+      pknown = plugins.known || [];
+    } catch (e) {
+      err = e.message;
+      plugins = { plugins: [], example: null };
+    }
+    render();
+  }
+
+  function pluginCard(p) {
+    const c = el("div", "pr-card" + (pdraft && pdraft.id === p.id ? " on" : ""));
+    const nm = el("div", "nm");
+    nm.append(el("span", "", p.name || p.id));
+    nm.append(el("span", "ver", p.state === "ready" ? t("Ready") : p.state === "resting" ? t("Resting") + " " + (p.resting || "") : t("Off")));
+    c.append(nm);
+    c.append(el("div", "sub", p.url));
+    const cnt = el("div", "cnt");
+    cnt.append(el("span", "", t("Calls") + " " + p.calls));
+    cnt.append(el("span", "", t("Answered") + " " + p.answered));
+    if (p.failures) cnt.append(el("span", "", t("Failures") + " " + p.failures));
+    if (p.mean) cnt.append(el("span", "", t("Mean") + " " + p.mean + " ms"));
+    c.append(cnt);
+    if (p.err) c.append(el("p", "pr-err", p.err));
+    const acts = el("div", "acts");
+    const ed = el("button", "text sm", t("Edit"));
+    ed.type = "button";
+    ed.onclick = () => { pdraft = JSON.parse(JSON.stringify(p)); ptest = null; render(); };
+    acts.append(ed);
+    const rm = el("button", "text sm", t("Remove"));
+    rm.type = "button";
+    rm.onclick = async () => {
+      await api("gateway-plugins/remove", { id: p.id });
+      pdraft = null;
+      await loadPlugins();
+    };
+    acts.append(rm);
+    c.append(acts);
+    return c;
+  }
+
+  function pluginEditor() {
+    const s = el("section", "pr-sec");
+    const head = el("div", "pr-head");
+    head.append(el("h3", "", pdraft.id ? pdraft.id : t("New gateway plugin")));
+    head.append(el("span", "grow"));
+    const save = el("button", "text sm", t("Save"));
+    save.type = "button";
+    save.onclick = async () => {
+      err = "";
+      try {
+        await api("gateway-plugins/save", pdraft);
+        pdraft = null;
+        await loadPlugins();
+        status(t("Saved"), "ok");
+      } catch (e) {
+        err = e.message;
+        render();
+      }
+    };
+    const cancel = el("button", "text sm", t("Cancel"));
+    cancel.type = "button";
+    cancel.onclick = () => { pdraft = null; render(); };
+    head.append(save, cancel);
+    s.append(head);
+
+    const row = (label, node, why) => {
+      const l = el("label", "", label);
+      const d = el("div", "pr-field");
+      d.append(node);
+      if (why) d.append(el("p", "pr-note", why));
+      s.append(l, d);
+    };
+    const idIn = el("input");
+    idIn.value = pdraft.id || "";
+    idIn.placeholder = "redteam";
+    idIn.oninput = () => { pdraft.id = idIn.value; };
+    row(t("Id"), idIn, t("One word: how the plugin is named in the ledger and here."));
+
+    const url = el("input");
+    url.value = pdraft.url || "";
+    url.placeholder = "http://127.0.0.1:8790";
+    url.oninput = () => { pdraft.url = url.value; };
+    row(t("Address"), url, t("Where the plugin answers. magpie POSTs to /request and /usage there."));
+
+    const sel = el("select");
+    const every = el("option", "", t("Every agent"));
+    every.value = "";
+    sel.append(every);
+    for (const a of pknown) {
+      const o = el("option", "", a.name || a.id);
+      o.value = a.id;
+      if ((pdraft.agents || []).includes(a.id)) o.selected = true;
+      sel.append(o);
+    }
+    sel.onchange = () => {
+      const v = sel.value;
+      pdraft.agents = v ? [...new Set([...(pdraft.agents || []), v])] : [];
+      render();
+    };
+    const chips = el("div", "chips");
+    for (const a of pdraft.agents || []) {
+      const c = el("button", "chip", a + " ×");
+      c.type = "button";
+      c.onclick = () => { pdraft.agents = (pdraft.agents || []).filter((x) => x !== a); render(); };
+      chips.append(c);
+    }
+    row(t("Agents"), (() => { const d = el("div", "stack"); d.append(sel, chips); return d; })(),
+      t("Only these agents' requests go through it. Empty is every one."));
+
+    const usage = el("input");
+    usage.type = "checkbox";
+    usage.checked = !!pdraft.usage;
+    usage.onchange = () => { pdraft.usage = usage.checked; };
+    row(t("Send it the ledger"), usage, t("Usage rows, for a plugin that analyses traffic rather than editing it."));
+
+    const timeout = el("input");
+    timeout.value = pdraft.timeout || "";
+    timeout.placeholder = "1500ms";
+    timeout.oninput = () => { pdraft.timeout = timeout.value; };
+    row(t("Timeout"), timeout, t("How long it has to answer a request. Past it, the request goes out as it came."));
+
+    const off = el("input");
+    off.type = "checkbox";
+    off.checked = !!pdraft.disabled;
+    off.onchange = () => { pdraft.disabled = off.checked; };
+    row(t("Off"), off, t("Saved without being asked."));
+
+    s.append(pluginTry());
+    s.append(el("p", "pr-note", t("A plugin that fails, times out or changes the model leaves the request exactly as it was: with every plugin off or failing, the gateway serves what it served before one was installed.")));
+    if (err) s.append(el("p", "pr-err", err));
+    return s;
+  }
+
+  function pluginTry() {
+    const s = el("section", "pr-sec");
+    s.append(el("h3", "", t("Try the plugin")));
+    const ex = plugins && plugins.requestExample;
+    ptest = ptest || { body: JSON.stringify(ex || { model: "m", messages: [{ role: "user", content: "hi" }] }, null, 2), out: "", error: "" };
+    const ta = el("textarea");
+    ta.rows = 8;
+    ta.value = ptest.body;
+    ta.oninput = () => { ptest.body = ta.value; };
+    const run = el("button", "text sm", t("Try"));
+    run.type = "button";
+    run.onclick = async () => {
+      err = "";
+      try {
+        const r = await api("gateway-plugins/try", { plugin: pdraft, body: ptest.body, agent: (pdraft.agents || [])[0] || "", model: "claude-sonnet-5-5" });
+        ptest.out = r.body || "";
+        ptest.error = r.error || "";
+        render();
+      } catch (e) {
+        ptest.error = e.message;
+        render();
+      }
+    };
+    s.append(ta, run);
+    if (ptest.error) s.append(el("p", "pr-err", ptest.error));
+    if (ptest.out) s.append(el("pre", "pr-diff", ptest.out));
+    return s;
+  }
+
+  function pluginsPane() {
+    const s = el("div", "pr-body");
+    s.append(el("p", "pr-note", t("A gateway plugin is a program of your own that every request goes through, inside magpie: it is told the agent, the model and the provider, and may hand back the body the vendor gets. Any language, one HTTP endpoint.")));
+    const grid = el("div", "pr-grid");
+    for (const p of plugins?.plugins || []) grid.append(pluginCard(p));
+    const add = el("button", "pr-card", "＋ " + t("New gateway plugin"));
+    add.type = "button";
+    add.onclick = () => { pdraft = { id: "", url: "", agents: [], usage: false, timeout: "" }; ptest = null; render(); };
+    grid.append(add);
+    s.append(grid);
+    if (pdraft) s.append(pluginEditor());
+    if (err) s.append(el("p", "pr-err", err));
+    return s;
+  }
+
   ctx.slots.add("page", {
     key: "presets",
     title: "Agent presets",
     html: `<div class="presets-page" id="presetsRoot"></div>`,
-    open: () => load(),
+    open: () => (tab === "plugins" ? loadPlugins() : load()),
     relang: () => render(),
+    title: "Agent presets",
   });
 });

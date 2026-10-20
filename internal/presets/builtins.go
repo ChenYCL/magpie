@@ -17,12 +17,19 @@ var builtins = []Preset{
 	{
 		ID: "standard", Name: "标准模式", Builtin: true, Order: 1,
 		Sub:   "新任务默认",
-		About: "处理代码、文件和资料的默认方式。Agent 按需使用检索、编辑等工具，能在一次会话里读、改、跑、验证。",
+		About: "magpie 原样转发请求：不改提示词、不改上下文文件、不改工具。这是默认模式，也是没有安装预设之前的行为。",
+		// Standard changes nothing: it is what magpie does for every
+		// agent already, and a preset that is the default must not edit a
+		// request the user never asked it to edit. Its patches are the
+		// shape a user's own starts from, all off.
 		Patches: []Patch{
-			{ID: "prompt-runtime", Kind: KindPrompt, Action: ActAppend,
-				Value: "<runtime-context>\nThe user's project is the one the agent opened. Prefer the tools you have over new machinery; read before writing; verify what you changed.\n</runtime-context>"},
-			{ID: "context-project", Kind: KindContext, Action: ActAllow, Match: "CLAUDE.md|AGENTS.md|*.md"},
-			{ID: "tools-all", Kind: KindTools, Action: ActAllow, Match: "*"},
+			{ID: "prompt-extra", Kind: KindPrompt, Action: ActAppend, Disabled: true,
+				Why:   "标准模式不改提示词",
+				Value: "<project-context>\nThe user's project is the one the agent opened.\n</project-context>"},
+			{ID: "context-project", Kind: KindContext, Action: ActAllow, Disabled: true,
+				Why: "标准模式不改上下文文件", Match: "CLAUDE.md|AGENTS.md"},
+			{ID: "tools-all", Kind: KindTools, Action: ActAllow, Disabled: true,
+				Why: "标准模式不改工具", Match: "*"},
 		},
 	},
 	{

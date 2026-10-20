@@ -1,38 +1,96 @@
 // The Agent presets page: the presets magpie ships and the user's, the
 // patches of each, which agents get one, and what the last requests
-// through a preset did.
+// through a preset did — and, beside them, the gateway plugins.
 //
-// A page the presets plugin adds to the window (kernel.js), its words in
-// i18n.js beside this file. The presets themselves are the core's
-// (/api/presets), since the presets' store is magpie's and not a plugin's:
-// this file draws it.
+// A page the presets plugin adds to the window (kernel.js). The presets
+// themselves are the core's (/api/presets), since the presets' store is
+// magpie's and not a plugin's: this file draws it, with the shapes the
+// rest of magpie has — cards, text buttons, the window's own menu — and a
+// centred dialog for anything that is edited or picked, the way shadcn's
+// dialog reads: a header, a body that scrolls, a footer of actions.
+//
+// The words are in i18n.js, the core's: the page says nothing a plugin's
+// own i18n.js would have to carry, so it stays one file.
 magpie.plugin("presets", (ctx) => {
-  let data = null;        // GET /api/presets
-  let sel = "";           // the preset the page is on
-  let draft = null;       // the preset being edited (a copy)
-  let trying = null;      // { proto, body, out, stats } of the Try panel
+  let data = null;      // GET /api/presets
+  let sel = "";         // the preset the page is on
+  let draft = null;     // the preset being edited (in a dialog)
+  let trying = null;    // { proto, body, out, stats } of a dialog's Try
   let err = "";
-  let tab = "presets";    // "presets" or "plugins"
-  let plugins = null;     // GET /api/gateway-plugins
-  let pdraft = null;      // a gateway plugin being edited
-  let ptest = null;       // { body, out, error } of a plugin's Try
+  let tab = "presets";  // "presets" or "plugins"
+  let plugins = null;   // GET /api/gateway-plugins
+  let pdraft = null;    // a gateway plugin being edited (in a dialog)
+  let ptest = null;     // { body, out, error } of a plugin's Try
   let pknown = [];
 
-  // ---- the window's own controls -------------------------------------------
-  // Nothing here is a native <select>: magpie draws a pick in its own menu
-  // (kernel.js's ui.menu), and a native one would be the one grey control in
-  // a page of magpie's. Same for the switch and the field.
+  const Standard = () => "standard";
+
+  // ---- the window's controls ------------------------------------------------
+  // Nothing native: a pick is the window's menu (kernel.js's ui.menu), a
+  // switch its toggle, and a field a field — so a page looks like the rest
+  // of magpie and not like a form a browser drew.
 
   const pick = (opts, value, onPick, head) => ctx.ui.menu(opts.map(([v, name]) => ({ v, name })), value, head || "", onPick);
   const switchOn = (on, label, onChange) => ctx.ui.toggle(!!on, label, onChange);
-  function field(value, placeholder, onInput, cls) {
-    const i = el("input", "set-field" + (cls ? " " + cls : ""));
+  function field(value, placeholder, onInput) {
+    const i = el("input", "set-field");
     i.type = "text";
     i.value = value || "";
     if (placeholder) i.placeholder = placeholder;
     i.oninput = () => onInput(i.value);
     return i;
   }
+
+  // a button, the window's way: quiet, or the one that acts
+  function btn(label, onClick, kind) {
+    const b = el("button", kind === "primary" ? "btn-p" : "btn-s", label);
+    b.type = "button";
+    b.onclick = onClick;
+    return b;
+  }
+
+  // A centred dialog, the way the rest of the window has one: a header, a
+  // body that scrolls, a footer of actions. magpie's own .modal is used, so
+  // it sits over the window, closes on Escape and on a click outside, and
+  // gives the keyboard back where it was.
+  function dialog({ title, note, body, actions, wide }) {
+    const ed = el("div", "editor framed pr-dlg" + (wide ? " wide" : ""));
+    const head = el("div", "ehead");
+    head.append(el("b", "", title));
+    if (note) head.append(el("span", "note", note));
+    const x = el("button", "icon pr-x", "✕");
+    x.type = "button";
+    x.setAttribute("aria-label", t("Close"));
+    x.onclick = () => { pdraft = null; draft = null; closeModal(); };
+    head.append(el("span", "grow"), x);
+    const eb = el("div", "ebody");
+    eb.append(...[].concat(body || []));
+    const bar = el("div", "bar");
+    bar.append(el("span", "grow"), ...(actions || []));
+    ed.append(head, eb, bar);
+    openModal(ed);
+    $("#modal").classList.add("presets");
+    return ed;
+  }
+
+  // ---- presets ---------------------------------------------------------------
+
+  async function load() {
+    err = "";
+    try {
+      data = await api("presets");
+    } catch (e) {
+      err = e.message;
+      data = { presets: [], known: [], recent: [] };
+    }
+    if (!sel || !byId(sel)) sel = data.default || Standard();
+    render();
+  }
+
+  const presets = () => (data?.presets || []);
+  const byId = (id) => presets().find((p) => p.id === id) || null;
+  const cur = () => byId(sel) || presets()[0] || null;
+  const isCurrent = (p) => p.id === (data?.default || Standard());
 
   const KINDS = { prompt: "Prompt", context: "Context", tools: "Tools" };
   const ACTIONS = {
@@ -41,128 +99,175 @@ magpie.plugin("presets", (ctx) => {
     tools: ["allow", "deny", "rename", "compact"],
   };
 
-  // presets in the order the cards show them
-  const presets = () => (data?.presets || []);
-  const byId = (id) => presets().find((p) => p.id === id) || null;
-  // Standard is the preset magpie serves by default: what it did before
-  // presets existed
-  const Standard = () => "standard";
-  const cur = () => byId(sel) || presets()[0] || null;
-
-  async function load() {
-    err = "";
-    try {
-      data = await api("presets");
-    } catch (e) {
-      err = e.message;
-      data = { presets: [], agents: {}, known: [], recent: [] };
-    }
-    if (!sel || !byId(sel)) sel = data.default || presets()[0]?.id || "";
-    render();
-  }
-
-  function count(kind, patches) {
+  // one kind's patches, as "16/19 · 跳过 3"
+  function tally(patches, kind) {
     const ps = (patches || []).filter((p) => p.kind === kind);
-    return { total: ps.length, off: ps.filter((p) => p.disabled).length };
+    const off = ps.filter((p) => p.disabled).length;
+    return { on: ps.length - off, total: ps.length, off };
   }
 
-  // counters as dsh's cards show them: what the preset carries, and how
-  // many of them are off in it
   function counters(patches) {
-    const row = el("div", "cnt");
+    const row = el("div", "pr-cnt");
     for (const k of ["prompt", "context", "tools"]) {
-      const c = count(k, patches);
+      const c = tally(patches, k);
       const s = el("span");
-      s.append(el("b", "", t(KINDS[k])), document.createTextNode(" " + (c.total - c.off) + "/" + c.total));
-      if (c.off) s.append(document.createTextNode(" · " + t("Skipped") + " " + c.off));
+      s.append(el("i", "", t(KINDS[k])), document.createTextNode(` ${c.on}/${c.total}`));
+      if (c.off) s.append(el("em", "", ` · ${c.off}`));
       row.append(s);
     }
-    const all = (patches || []).length;
-    const off = (patches || []).filter((p) => p.disabled).length;
-    row.append(el("span", "", t("Total") + " " + (data.recent?.[0] ? all : all - off) + "/" + all));
     return row;
   }
 
   function card(p) {
-    const isCur = p.id === (data.default || Standard());
-    const c = el("div", "pr-card" + (p.id === sel ? " on" : "") + (p.id === isCur ? " cur" : ""));
-    const nm = el("div", "nm");
-    nm.append(el("span", "", p.name || p.id));
-    if (p.version) nm.append(el("span", "ver", "v" + p.version));
-    nm.append(el("span", "ver", t(p.builtin ? "Built-in" : "Custom")));
-    if (isCur) nm.append(el("span", "kind", t("In use")));
-    c.append(nm);
-    c.append(el("div", "sub", p.sub || ""));
+    const c = el("div", "pr-card" + (p.id === sel ? " sel" : "") + (isCurrent(p) ? " cur" : ""));
+    const top = el("div", "pr-card-top");
+    top.append(el("span", "pr-card-name", p.name || p.id));
+    if (isCurrent(p)) top.append(el("span", "pr-badge", t("In use")));
+    c.append(top);
+    c.append(el("p", "pr-card-sub", p.sub || ""));
     c.append(counters(p.patches));
-    const acts = el("div", "acts");
-    const curB = el("button", "text sm", t(isCur ? "Current" : "Set as current"));
-    curB.type = "button";
-    curB.disabled = isCur;
-    curB.onclick = async (e) => {
-      e.stopPropagation();
-      await api("presets/bind", { default: true, preset: p.id });
-      await load();
-    };
-    const editB = el("button", "text sm", t("Edit"));
-    editB.type = "button";
-    editB.onclick = (e) => { e.stopPropagation(); startEdit(p); };
-    acts.append(curB, editB);
+    const acts = el("div", "pr-card-acts");
+    acts.append(
+      btn(t(isCurrent(p) ? "Current" : "Set as current"), async (e) => {
+        e.stopPropagation();
+        await api("presets/default", { preset: p.id });
+        await load();
+      }, isCurrent(p) ? "" : ""),
+      btn(t("Edit"), (e) => { e.stopPropagation(); editPreset(p); }),
+    );
+    acts.lastChild.classList.add("em");
     c.append(acts);
     c.onclick = (e) => {
-      if (e.target.closest("button")) return; // its own buttons act
+      if (e.target.closest("button")) return;
       sel = p.id;
-      trying = null;
       render();
     };
     return c;
   }
 
-  function startEdit(p) {
+  // the editor: one dialog, its patches by kind, the about text, and a Try
+  function editPreset(p) {
     draft = JSON.parse(JSON.stringify(p));
+    trying = null;
     err = "";
-    render();
+    openPresetDialog();
   }
 
-  function patchRow(pa, i) {
-    const r = el("div", "pr-row" + (pa.disabled ? " off" : ""));
-    const kind = pick(["prompt", "context", "tools"].map((k) => [k, t(KINDS[k])]), pa.kind, (v) => {
+  function openPresetDialog() {
+    const d = draft;
+    const body = [];
+    const about = el("textarea", "pr-value");
+    about.rows = 3;
+    about.value = d.about || "";
+    about.placeholder = t("What this preset does, and when to use it");
+    about.oninput = () => { d.about = about.value; };
+    body.push(section(t("About"), [about]));
+
+    for (const kind of ["prompt", "context", "tools"]) {
+      const c = tally(d.patches, kind);
+      const rows = el("div", "pr-rows");
+      for (const pa of (d.patches || []).filter((x) => x.kind === kind)) rows.append(patchRow(pa));
+      const add = btn(t("Add a patch"), () => {
+        d.patches = d.patches || [];
+        const n = d.patches.filter((x) => x.kind === kind).length + 1;
+        d.patches.push({ id: `${kind}-${n}`, kind, action: ACTIONS[kind][0], match: "", value: "" });
+        openPresetDialog();
+      });
+      add.classList.add("pr-add");
+      rows.append(add);
+      body.push(section(`${t(KINDS[kind])} ${c.on}/${c.total}`, [rows]));
+    }
+    body.push(pluginTrySection());
+
+    const actions = [];
+    if (d.builtin) {
+      actions.push(btn(t("Reset"), async () => { await api("presets/reset", { id: d.id }); draft = null; closeModal(); await load(); }));
+    } else {
+      actions.push(btn(t("Remove"), async () => { await api("presets/remove", { id: d.id }); draft = null; closeModal(); await load(); }));
+    }
+    actions.push(btn(t("Cancel"), () => { draft = null; closeModal(); }));
+    actions.push(btn(t("Save"), async () => {
+      err = "";
+      try {
+        await api("presets/save", draft);
+        draft = null;
+        closeModal();
+        await load();
+        status(t("Saved"), "ok");
+      } catch (e) {
+        err = e.message;
+        openPresetDialog();
+      }
+    }, "primary"));
+
+    const notes = [];
+    if (d.builtin) notes.push(el("p", "pr-note", t("This preset is one magpie ships. Saving keeps your version beside it; Reset puts the shipped one back.")));
+    notes.push(el("p", "pr-note", t("A preset changes the request only. It never changes the model, the stream flag, or where the request is routed.")));
+    if (err) notes.push(el("p", "pr-err", err));
+
+    dialog({ title: d.name || d.id, note: t("Preset"), body: [...body, ...notes], actions, wide: true });
+  }
+
+  function section(title, kids) {
+    const s = el("section", "pr-sec");
+    s.append(el("h3", "", title));
+    s.append(...kids);
+    return s;
+  }
+
+  function patchRow(pa) {
+    const r = el("div", "pr-prow" + (pa.disabled ? " off" : ""));
+    r.append(pick(["prompt", "context", "tools"].map((k) => [k, t(KINDS[k])]), pa.kind, (v) => {
       pa.kind = v;
       if (!ACTIONS[pa.kind].includes(pa.action)) pa.action = ACTIONS[pa.kind][0];
-      render();
-    }, t("Kind"));
-    const act = pick((ACTIONS[pa.kind] || []).map((a) => [a, a]), pa.action, (v) => { pa.action = v; render(); }, t("Action"));
-    const match = field(pa.match, pa.kind === "tools" ? "Read|Write|mcp__*" : pa.kind === "context" ? "CLAUDE.md|AGENTS.md|*.md" : "skills", (v) => { pa.match = v; });
-    let value;
+      openPresetDialog();
+    }, t("Kind")));
+    r.append(pick((ACTIONS[pa.kind] || []).map((a) => [a, a]), pa.action, (v) => { pa.action = v; openPresetDialog(); }, t("Action")));
+    r.append(field(pa.match, pa.kind === "tools" ? "Read|Write|mcp__*" : pa.kind === "context" ? "CLAUDE.md|AGENTS.md" : "skills", (v) => { pa.match = v; }));
     if (pa.kind === "prompt" || (pa.kind === "tools" && pa.action === "rename")) {
-      value = el("textarea", "pr-value");
-      value.value = pa.value || "";
-      value.placeholder = pa.action === "rename" ? t("new name") : t("text");
-      value.oninput = () => { pa.value = value.value; };
+      const t2 = el("textarea", "pr-value");
+      t2.value = pa.value || "";
+      t2.placeholder = pa.action === "rename" ? t("new name") : t("text");
+      t2.oninput = () => { pa.value = t2.value; };
+      r.append(t2);
     } else {
-      value = el("span", "pr-none", "—");
+      r.append(el("span", "pr-dash", "—"));
     }
-    const on = switchOn(!pa.disabled, t("Off in this preset"), (v) => { pa.disabled = !v; render(); });
-    r.append(kind, act, match, value, on);
+    r.append(switchOn(!pa.disabled, t("Off in this preset"), (v) => { pa.disabled = !v; openPresetDialog(); }));
     return r;
   }
 
-  function kindSection(kind) {
+  // Try, inside the dialog: a sample body, the reply, and what each patch did
+  function pluginTrySection() {
     const s = el("section", "pr-sec");
-    const patches = (draft.patches || []).filter((p) => p.kind === kind);
-    const c = count(kind, draft.patches);
-    s.append(el("h3", "", t(KINDS[kind]) + " " + (c.total - c.off) + "/" + c.total));
-    if (!patches.length) s.append(el("p", "pr-note", t("No patches: this preset leaves every request as it is.")));
-    for (const pa of patches) s.append(patchRow(pa, draft.patches.indexOf(pa)));
-    const add = el("button", "text sm", t("Add a patch"));
-    add.type = "button";
-    add.onclick = () => {
-      draft.patches = draft.patches || [];
-      const n = draft.patches.filter((p) => p.kind === kind).length + 1;
-      draft.patches.push({ id: kind + "-" + n, kind, action: ACTIONS[kind][0], match: "", value: "" });
-      render();
-    };
-    s.append(add);
+    s.append(el("h3", "", t("Try a request")));
+    s.append(el("p", "pr-note", t("Paste a request body (Chat Completions, Anthropic Messages, Responses or Gemini) and see what this preset makes of it.")));
+    trying = trying || { proto: "anthropic", body: SAMPLE, out: "", stats: null };
+    const row = el("div", "pr-tryrow");
+    row.append(pick([["anthropic", "Anthropic Messages"], ["chat", "Chat Completions"], ["responses", "Responses"], ["gemini", "Gemini"]], trying.proto, (v) => { trying.proto = v; openPresetDialog(); }, t("API")));
+    row.append(btn(t("Try"), async () => {
+      try {
+        const r = await api("presets/try", { preset: draft, proto: trying.proto, body: trying.body });
+        trying.out = r.body;
+        trying.stats = r.stats;
+      } catch (e) {
+        err = e.message;
+      }
+      openPresetDialog();
+    }));
+    s.append(row);
+    const ta = el("textarea", "pr-value pr-json");
+    ta.rows = 7;
+    ta.value = trying.body;
+    ta.oninput = () => { trying.body = ta.value; };
+    s.append(ta);
+    if (trying.stats) s.append(el("p", "pr-note", tn(trying.stats)), el("pre", "pr-diff", trying.out));
     return s;
+  }
+
+  function tn(st) {
+    const one = (c) => `${c.applied}/${c.total}` + (c.skipped ? ` · ${t("Skipped")} ${c.skipped}` : "");
+    return `${t("Prompt")} ${one(st.prompt)}  ·  ${t("Context")} ${one(st.context)}  ·  ${t("Tools")} ${one(st.tools)}   (${st.bytesIn} → ${st.bytesOut})`;
   }
 
   const SAMPLE = JSON.stringify({
@@ -176,149 +281,29 @@ magpie.plugin("presets", (ctx) => {
     messages: [{ role: "user", content: "list the files" }],
   }, null, 2);
 
-  function trySection() {
-    const s = el("section", "pr-sec");
-    s.append(el("h3", "", t("Try a request")));
-    s.append(el("p", "pr-note", t("Paste a request body (Chat Completions, Anthropic Messages, Responses or Gemini) and see what this preset makes of it: the body the vendor gets and what each patch did.")));
-    trying = trying || { proto: "anthropic", body: SAMPLE, out: "", stats: null };
-    const proto = pick([["anthropic", "Anthropic Messages"], ["chat", "Chat Completions"], ["responses", "Responses"], ["gemini", "Gemini"]],
-      trying.proto, (v) => { trying.proto = v; }, t("API"));
-    const body = el("textarea", "pr-value");
-    body.value = trying.body;
-    body.rows = 10;
-    body.oninput = () => { trying.body = body.value; };
-    const run = el("button", "text sm", t("Try"));
-    run.type = "button";
-    run.onclick = async () => {
-      err = "";
-      try {
-        const r = await api("presets/try", { preset: draft || cur(), proto: trying.proto, body: trying.body });
-        trying.out = r.body;
-        trying.stats = r.stats;
-        render();
-      } catch (e) {
-        err = e.message;
-        render();
-      }
-    };
-    s.append(proto, body, run);
-    if (trying.stats) {
-      const st = trying.stats;
-      s.append(el("p", "pr-note", tn(st)));
-      s.append(el("pre", "pr-diff", trying.out));
-    }
-    return s;
-  }
-
-  function tn(st) {
-    const one = (c) => c.applied + "/" + c.total + (c.skipped ? " · " + t("Skipped") + " " + c.skipped : "");
-    return t("Prompt") + " " + one(st.prompt) + "  ·  " + t("Context") + " " + one(st.context) + "  ·  " + t("Tools") + " " + one(st.tools)
-      + "   (" + st.bytesIn + " → " + st.bytesOut + " bytes)";
-  }
-
-  function editor() {
-    const s = el("section", "pr-sec");
-    const head = el("div", "pr-head");
-    head.append(el("h3", "", draft.name || draft.id));
-    head.append(el("span", "grow"));
-    if (draft.builtin) {
-      const reset = el("button", "text sm", t("Reset"));
-      reset.type = "button";
-      reset.onclick = async () => {
-        await api("presets/reset", { id: draft.id });
-        draft = null;
-        await load();
-      };
-      head.append(reset);
-    } else {
-      const rm = el("button", "text sm", t("Remove"));
-      rm.type = "button";
-      rm.onclick = async () => {
-        await api("presets/remove", { id: draft.id });
-        draft = null;
-        sel = "";
-        await load();
-      };
-      head.append(rm);
-    }
-    const save = el("button", "text sm", t("Save"));
-    save.type = "button";
-    save.onclick = async () => {
-      err = "";
-      try {
-        await api("presets/save", draft);
-        draft = null;
-        await load();
-        status(t("Preset saved"), "ok");
-      } catch (e) {
-        err = e.message;
-        render();
-      }
-    };
-    const cancel = el("button", "text sm", t("Cancel"));
-    cancel.type = "button";
-    cancel.onclick = () => { draft = null; render(); };
-    head.append(save, cancel);
-    s.append(head);
-    if (draft.builtin) s.append(el("p", "pr-note", t("This preset is one magpie ships. Saving keeps your version beside it; Reset puts the shipped one back.")));
-    const about = el("textarea");
-    about.value = draft.about || "";
-    about.placeholder = t("What this preset does, and when to use it");
-    about.rows = 3;
-    about.oninput = () => { draft.about = about.value; };
-    s.append(about);
-    for (const k of ["prompt", "context", "tools"]) s.append(kindSection(k));
-    s.append(trySection());
-    s.append(el("p", "pr-note", t("A preset changes the request only. It never changes the model, the stream flag, or where the request is routed.")));
-    if (err) s.append(el("p", "pr-err", err));
-    return s;
-  }
-
-  // the preset pick: every preset, and the choice to follow the default
-  function presetPick(current, onPick) {
-    const opts = [["", "— " + t("Follow the default")], ...presets().map((p) => [p.id, p.name || p.id])];
-    return pick(opts, current, onPick, t("Preset"));
-  }
-
-  function binding() {
+  // every agent gets the preset picked here; the ones left out get none
+  function everyAgent() {
     const s = el("section", "pr-sec");
     s.append(el("h3", "", t("Every agent")));
-    const top = el("div", "pr-row-line");
-    top.append(el("span", "pr-lbl", t("Preset")));
-    top.append(presetPick(data.default || Standard(), async (v) => {
+    const line = el("div", "pr-line");
+    line.append(el("span", "pr-lbl", t("Preset")));
+    line.append(pick(presets().map((p) => [p.id, p.name || p.id]), data.default || Standard(), async (v) => {
       await api("presets/default", { preset: v });
       await load();
-    }));
-    s.append(top);
+    }, t("Preset")));
+    s.append(line);
     s.append(el("p", "pr-note", t("One preset for every agent. An agent left out gets none: its requests go out as it sent them.")));
 
-    // the agents left out: a chip each, and a menu that adds them — a
-    // searchable, multi-pick grid of five a row, closed by Done
     const out = data.exclude || [];
-    const byName = (a) => a?.name || a?.id || "";
-    const head = el("div", "pr-head");
-    head.append(el("h3", "", t("Leave an agent out")));
-    head.append(el("span", "grow"));
-    const add = el("button", "proto pick", t("Add agents…"));
-    add.type = "button";
-    add.onclick = (ev) => {
-      ev.stopPropagation();
-      const rest = (data.known || []).filter((a) => !out.includes(a.id));
-      if (!rest.length) return;
-      openProtoMenu(add, rest.map((a) => ({ v: a.id, name: byName(a) })), [], (picked) => {
-        // Done: every pick excluded at once
-        if (!picked.length) return;
-        Promise.all(picked.map((id) => api("presets/exclude", { agent: id, excluded: true })))
-          .then(() => load());
-      }, t("Leave an agent out"), "pm-5col", "right", false, t("Find an agent"));
-    };
-    head.append(add);
+    const head = el("div", "pr-line");
+    head.append(el("span", "pr-lbl", t("Leave an agent out")));
+    head.append(btn(t("Add agents…"), () => chooseAgents(out), ""));
     s.append(head);
     const chips = el("div", "chips");
-    if (!out.length) chips.append(el("span", "pr-none", t("None: every agent gets the preset above.")));
+    if (!out.length) chips.append(el("span", "pr-dash", t("None: every agent gets the preset above.")));
+    const byID = (id) => (data.known || []).find((a) => a.id === id);
     for (const id of out) {
-      const a = (data.known || []).find((x) => x.id === id);
-      const c = el("button", "chip", byName(a) + " ×");
+      const c = el("button", "chip", (byID(id)?.name || id) + "  ✕");
       c.type = "button";
       c.title = t("Put it back");
       c.onclick = async () => {
@@ -328,8 +313,59 @@ magpie.plugin("presets", (ctx) => {
       chips.append(c);
     }
     s.append(chips);
-    s.append(el("p", "pr-note", t("An agent left out gets no preset: its requests go out exactly as it sent them.")));
     return s;
+  }
+
+  // the agents left out, picked in a dialog: a search box over a grid of
+  // five a row, every pick a toggle, and Done applies them at once
+  function chooseAgents(out) {
+    const all = (data.known || []);
+    let picked = new Set(out);
+    let q = "";
+    const body = [];
+    const search = el("input", "set-field pr-search");
+    search.type = "search";
+    search.placeholder = t("Find an agent");
+    search.setAttribute("aria-label", t("Find an agent"));
+    const grid = el("div", "pr-agents");
+    const paint = () => {
+      grid.replaceChildren();
+      const words = q.trim().toLocaleLowerCase();
+      const list = all.filter((a) => !words || (a.name || a.id).toLocaleLowerCase().includes(words) || a.id.includes(words));
+      if (!list.length) grid.append(el("span", "pr-dash", t("No agent by that name")));
+      for (const a of list) {
+        const on = picked.has(a.id);
+        const b = el("button", "pr-agent" + (on ? " on" : ""), a.name || a.id);
+        b.type = "button";
+        b.setAttribute("role", "checkbox");
+        b.setAttribute("aria-checked", String(on));
+        b.title = a.id;
+        b.onclick = () => {
+          on ? picked.delete(a.id) : picked.add(a.id);
+          b.classList.toggle("on", picked.has(a.id));
+          b.setAttribute("aria-checked", String(picked.has(a.id)));
+          done.textContent = picked.size ? t("Leave out {n}", { n: picked.size }) : t("Done");
+        };
+        grid.append(b);
+      }
+    };
+    search.oninput = () => { q = search.value; paint(); };
+    paint();
+    body.push(search, grid);
+    body.push(el("p", "pr-note", t("An agent left out gets no preset: its requests go out exactly as it sent them.")));
+    const done = btn(t("Done"), async () => {
+      const now = new Set(out);
+      const adds = [...picked].filter((id) => !now.has(id));
+      const dels = [...now].filter((id) => !picked.has(id));
+      closeModal();
+      await Promise.all([
+        ...adds.map((id) => api("presets/exclude", { agent: id, excluded: true })),
+        ...dels.map((id) => api("presets/exclude", { agent: id, excluded: false })),
+      ]);
+      await load();
+    }, "primary");
+    dialog({ title: t("Leave an agent out"), note: `${all.length}`, body, actions: [btn(t("Cancel"), () => closeModal()), done] });
+    search.focus({ preventScroll: true });
   }
 
   function recent() {
@@ -337,14 +373,170 @@ magpie.plugin("presets", (ctx) => {
     s.append(el("h3", "", t("Recent runs")));
     const rows = data.recent || [];
     if (!rows.length) {
-      s.append(el("p", "pr-note", t("Nothing has gone through this preset yet.")));
+      s.append(el("p", "pr-dash", t("Nothing has gone through this preset yet.")));
       return s;
     }
+    const list = el("div", "pr-runs");
     for (const r of rows.slice(0, 12)) {
-      s.append(el("p", "pr-note", new Date(r.at).toLocaleTimeString() + " · " + (r.agent || "?") + " · " + (r.preset || "?") + " · " + r.model + " — " + tn(r.stats)));
+      const line = el("div", "pr-run");
+      line.append(el("span", "pr-run-t", new Date(r.at).toLocaleTimeString()));
+      line.append(el("span", "pr-run-a", r.agent || "?"));
+      line.append(el("span", "pr-run-m", r.model || ""));
+      const c = el("span", "pr-run-c", tn(r.stats));
+      line.append(c);
+      list.append(line);
     }
+    s.append(list);
     return s;
   }
+
+  // ---- gateway plugins ---------------------------------------------------------
+
+  async function loadPlugins() {
+    err = "";
+    try {
+      plugins = await api("gateway-plugins");
+      pknown = plugins.known || [];
+    } catch (e) {
+      err = e.message;
+      plugins = { plugins: [], requestExample: null };
+    }
+    render();
+  }
+
+  function pluginCard(p) {
+    const c = el("div", "pr-card");
+    const top = el("div", "pr-card-top");
+    top.append(el("span", "pr-card-name", p.name || p.id));
+    const state = p.state === "ready" ? t("Ready") : p.state === "resting" ? t("Resting") : t("Off");
+    top.append(el("span", "pr-badge" + (p.state === "ready" ? " ok" : p.state === "resting" ? " warn" : ""), state));
+    c.append(top);
+    c.append(el("p", "pr-card-sub", p.url));
+    const cnt = el("div", "pr-cnt");
+    cnt.append(el("span", "", `${t("Calls")} ${p.calls}`), el("span", "", `${t("Answered")} ${p.answered}`));
+    if (p.failures) cnt.append(el("span", "", `${t("Failures")} ${p.failures}`));
+    if (p.mean) cnt.append(el("span", "", `${t("Mean")} ${p.mean} ms`));
+    c.append(cnt);
+    if (p.err) c.append(el("p", "pr-err", p.err));
+    const acts = el("div", "pr-card-acts");
+    acts.append(
+      btn(t("Edit"), () => editPlugin(p)),
+      btn(t("Remove"), async () => {
+        await api("gateway-plugins/remove", { id: p.id });
+        await loadPlugins();
+      }),
+    );
+    acts.lastChild.classList.add("em");
+    c.append(acts);
+    return c;
+  }
+
+  function editPlugin(p) {
+    pdraft = p ? JSON.parse(JSON.stringify(p)) : { id: "", url: "", agents: [], usage: false, timeout: "" };
+    ptest = null;
+    err = "";
+    openPluginDialog();
+  }
+
+  function openPluginDialog() {
+    const d = pdraft;
+    const body = [];
+    const rows = el("div", "pr-fields");
+    const row = (label, node, why) => {
+      const l = el("div", "pr-field");
+      l.append(el("label", "pr-lbl", label), node);
+      if (why) l.append(el("p", "pr-note", why));
+      rows.append(l);
+    };
+    row(t("Id"), field(d.id, "redteam", (v) => { d.id = v; }), t("One word: how the plugin is named in the ledger and here."));
+    row(t("Address"), field(d.url, "http://127.0.0.1:8790", (v) => { d.url = v; }), t("Where the plugin answers. magpie POSTs to /request and /usage there."));
+
+    // its agents: a pick that opens the same grid, and a chip each
+    const agentsBtn = el("button", "proto pick", (d.agents || []).length ? (d.agents.length === 1 ? d.agents[0] : t("{n} agents", { n: d.agents.length })) : t("Every agent"));
+    agentsBtn.type = "button";
+    const chips = el("div", "chips");
+    const paintChips = () => {
+      chips.replaceChildren();
+      for (const a of d.agents || []) {
+        const c = el("button", "chip", a + "  ✕");
+        c.type = "button";
+        c.onclick = () => { d.agents = (d.agents || []).filter((x) => x !== a); openPluginDialog(); };
+        chips.append(c);
+      }
+    };
+    paintChips();
+    agentsBtn.onclick = () => {
+      openProtoMenu(agentsBtn, pknown.map((a) => ({ v: a.id, name: a.name || a.id })), [...(d.agents || [])], (picked) => {
+        d.agents = picked;
+        openPluginDialog();
+      }, t("Agent"), "pm-5col", "right", false, t("Find an agent"));
+    };
+    row(t("Agents"), (() => { const s = el("div", "stack"); s.append(agentsBtn, chips); return s; })(), t("Only these agents' requests go through it. Empty is every one."));
+    row(t("Send it the ledger"), switchOn(d.usage, t("Send it the ledger"), (v) => { d.usage = v; }), t("Usage rows, for a plugin that analyses traffic rather than editing it."));
+    row(t("Timeout"), field(d.timeout, "1500ms", (v) => { d.timeout = v; }), t("How long it has to answer a request. Past it, the request goes out as it came."));
+    row(t("Off"), switchOn(d.disabled, t("Off"), (v) => { d.disabled = v; }), t("Saved without being asked."));
+    body.push(rows);
+    body.push(pluginTry());
+
+    const actions = [btn(t("Cancel"), () => { pdraft = null; closeModal(); }), btn(t("Save"), async () => {
+      err = "";
+      try {
+        await api("gateway-plugins/save", d);
+        pdraft = null;
+        closeModal();
+        await loadPlugins();
+        status(t("Saved"), "ok");
+      } catch (e) {
+        err = e.message;
+        openPluginDialog();
+      }
+    }, "primary")];
+    if (err) body.push(el("p", "pr-err", err));
+    body.push(el("p", "pr-note", t("A plugin that fails, times out or changes the model leaves the request exactly as it was.")));
+    dialog({ title: d.id || t("New gateway plugin"), note: t("Gateway plugin"), body, actions, wide: true });
+  }
+
+  function pluginTry() {
+    const s = el("section", "pr-sec");
+    s.append(el("h3", "", t("Try the plugin")));
+    ptest = ptest || { body: JSON.stringify(plugins?.requestExample?.body || { model: "m", messages: [] }, null, 2), out: "", error: "" };
+    const row = el("div", "pr-tryrow");
+    row.append(btn(t("Try"), async () => {
+      try {
+        const r = await api("gateway-plugins/try", { plugin: pdraft, body: ptest.body, agent: (pdraft.agents || [])[0] || "", model: "claude-sonnet-5-5" });
+        ptest.out = r.body || "";
+        ptest.error = r.error || "";
+      } catch (e) {
+        ptest.error = e.message;
+      }
+      openPluginDialog();
+    }));
+    s.append(row);
+    const ta = el("textarea", "pr-value pr-json");
+    ta.rows = 8;
+    ta.value = ptest.body;
+    ta.oninput = () => { ptest.body = ta.value; };
+    s.append(ta);
+    if (ptest.error) s.append(el("p", "pr-err", ptest.error));
+    if (ptest.out) s.append(el("pre", "pr-diff", ptest.out));
+    return s;
+  }
+
+  function pluginsPage() {
+    const wrap = el("div", "pr-body");
+    wrap.append(el("p", "pr-note", t("A gateway plugin is a program of your own that every request goes through, inside magpie: it is told the agent, the model and the provider, and may hand back the body the vendor gets. Any language, one HTTP endpoint.")));
+    const grid = el("div", "pr-grid");
+    for (const p of plugins?.plugins || []) grid.append(pluginCard(p));
+    const add = el("button", "pr-card pr-new", "＋ " + t("New gateway plugin"));
+    add.type = "button";
+    add.onclick = () => editPlugin(null);
+    grid.append(add);
+    wrap.append(grid);
+    if (err) wrap.append(el("p", "pr-err", err));
+    return wrap;
+  }
+
+  // ---- the page ---------------------------------------------------------------
 
   function render() {
     const root = $("#presetsRoot");
@@ -357,7 +549,6 @@ magpie.plugin("presets", (ctx) => {
       b.type = "button";
       b.onclick = () => {
         tab = id;
-        draft = null;
         render();
         if (id === "plugins" && !plugins) loadPlugins();
       };
@@ -365,14 +556,11 @@ magpie.plugin("presets", (ctx) => {
     }
     head.append(tabs);
     head.append(el("span", "grow"));
-    const reload = el("button", "text sm", "↻");
-    reload.type = "button";
-    reload.title = t("Reload");
-    reload.onclick = () => load();
-    head.append(reload);
+    head.append(btn("↻", () => (tab === "plugins" ? loadPlugins() : load())));
     root.append(head);
+
     if (tab === "plugins") {
-      root.append(pluginsPane());
+      root.append(pluginsPage());
       return;
     }
     root.append(el("p", "pr-note", t("Presets decide which prompt, context files and tools an agent's requests carry. A preset is a list of patches: nothing runs, a request is edited.")));
@@ -380,173 +568,9 @@ magpie.plugin("presets", (ctx) => {
     for (const p of presets()) grid.append(card(p));
     root.append(grid);
     const body = el("div", "pr-body");
-    body.append(draft ? editor() : binding());
-    if (!draft) body.append(recent());
+    body.append(everyAgent(), recent());
     root.append(body);
     if (err) root.append(el("p", "pr-err", err));
-  }
-
-  // ---- gateway plugins: programs of the user's own on every request -------
-
-  async function loadPlugins() {
-    err = "";
-    try {
-      plugins = await api("gateway-plugins");
-      pknown = plugins.known || [];
-    } catch (e) {
-      err = e.message;
-      plugins = { plugins: [], example: null };
-    }
-    render();
-  }
-
-  function pluginCard(p) {
-    const c = el("div", "pr-card" + (pdraft && pdraft.id === p.id ? " on" : ""));
-    const nm = el("div", "nm");
-    nm.append(el("span", "", p.name || p.id));
-    nm.append(el("span", "ver", p.state === "ready" ? t("Ready") : p.state === "resting" ? t("Resting") + " " + (p.resting || "") : t("Off")));
-    c.append(nm);
-    c.append(el("div", "sub", p.url));
-    const cnt = el("div", "cnt");
-    cnt.append(el("span", "", t("Calls") + " " + p.calls));
-    cnt.append(el("span", "", t("Answered") + " " + p.answered));
-    if (p.failures) cnt.append(el("span", "", t("Failures") + " " + p.failures));
-    if (p.mean) cnt.append(el("span", "", t("Mean") + " " + p.mean + " ms"));
-    c.append(cnt);
-    if (p.err) c.append(el("p", "pr-err", p.err));
-    const acts = el("div", "acts");
-    const ed = el("button", "text sm", t("Edit"));
-    ed.type = "button";
-    ed.onclick = () => { pdraft = JSON.parse(JSON.stringify(p)); ptest = null; render(); };
-    acts.append(ed);
-    const rm = el("button", "text sm", t("Remove"));
-    rm.type = "button";
-    rm.onclick = async () => {
-      await api("gateway-plugins/remove", { id: p.id });
-      pdraft = null;
-      await loadPlugins();
-    };
-    acts.append(rm);
-    c.append(acts);
-    return c;
-  }
-
-  function pluginEditor() {
-    const s = el("section", "pr-sec");
-    const head = el("div", "pr-head");
-    head.append(el("h3", "", pdraft.id ? pdraft.id : t("New gateway plugin")));
-    head.append(el("span", "grow"));
-    const save = el("button", "text sm", t("Save"));
-    save.type = "button";
-    save.onclick = async () => {
-      err = "";
-      try {
-        await api("gateway-plugins/save", pdraft);
-        pdraft = null;
-        await loadPlugins();
-        status(t("Saved"), "ok");
-      } catch (e) {
-        err = e.message;
-        render();
-      }
-    };
-    const cancel = el("button", "text sm", t("Cancel"));
-    cancel.type = "button";
-    cancel.onclick = () => { pdraft = null; render(); };
-    head.append(save, cancel);
-    s.append(head);
-
-    const row = (label, node, why) => {
-      const l = el("label", "", label);
-      const d = el("div", "pr-field");
-      d.append(node);
-      if (why) d.append(el("p", "pr-note", why));
-      s.append(l, d);
-    };
-    const idIn = field(pdraft.id, "redteam", (v) => { pdraft.id = v; });
-    row(t("Id"), idIn, t("One word: how the plugin is named in the ledger and here."));
-
-    const url = field(pdraft.url, "http://127.0.0.1:8790", (v) => { pdraft.url = v; });
-    row(t("Address"), url, t("Where the plugin answers. magpie POSTs to /request and /usage there."));
-
-    const sel = el("button", "proto pick", (pdraft.agents || []).length
-      ? (pdraft.agents.length === 1 ? pdraft.agents[0] : t("{n} agents", { n: pdraft.agents.length }))
-      : t("Every agent"));
-    sel.type = "button";
-    sel.onclick = (ev) => {
-      ev.stopPropagation();
-      openProtoMenu(sel, pknown.map((a) => ({ v: a.id, name: a.name || a.id })), [...(pdraft.agents || [])], (picked) => {
-        pdraft.agents = picked;
-        render();
-      }, t("Agent"), "pm-5col", "right", false, t("Find an agent"));
-    };
-    const chips = el("div", "chips");
-    for (const a of pdraft.agents || []) {
-      const c = el("button", "chip", a + " ×");
-      c.type = "button";
-      c.onclick = () => { pdraft.agents = (pdraft.agents || []).filter((x) => x !== a); render(); };
-      chips.append(c);
-    }
-    row(t("Agents"), (() => { const d = el("div", "stack"); d.append(sel, chips); return d; })(),
-      t("Only these agents' requests go through it. Empty is every one."));
-
-    const usage = switchOn(pdraft.usage, t("Send it the ledger"), (v) => { pdraft.usage = v; });
-    row(t("Send it the ledger"), usage, t("Usage rows, for a plugin that analyses traffic rather than editing it."));
-
-    const timeout = field(pdraft.timeout, "1500ms", (v) => { pdraft.timeout = v; });
-    row(t("Timeout"), timeout, t("How long it has to answer a request. Past it, the request goes out as it came."));
-
-    const off = switchOn(pdraft.disabled, t("Off"), (v) => { pdraft.disabled = v; });
-    row(t("Off"), off, t("Saved without being asked."));
-
-    s.append(pluginTry());
-    s.append(el("p", "pr-note", t("A plugin that fails, times out or changes the model leaves the request exactly as it was: with every plugin off or failing, the gateway serves what it served before one was installed.")));
-    if (err) s.append(el("p", "pr-err", err));
-    return s;
-  }
-
-  function pluginTry() {
-    const s = el("section", "pr-sec");
-    s.append(el("h3", "", t("Try the plugin")));
-    const ex = plugins && plugins.requestExample;
-    ptest = ptest || { body: JSON.stringify(ex || { model: "m", messages: [{ role: "user", content: "hi" }] }, null, 2), out: "", error: "" };
-    const ta = el("textarea");
-    ta.rows = 8;
-    ta.value = ptest.body;
-    ta.oninput = () => { ptest.body = ta.value; };
-    const run = el("button", "text sm", t("Try"));
-    run.type = "button";
-    run.onclick = async () => {
-      err = "";
-      try {
-        const r = await api("gateway-plugins/try", { plugin: pdraft, body: ptest.body, agent: (pdraft.agents || [])[0] || "", model: "claude-sonnet-5-5" });
-        ptest.out = r.body || "";
-        ptest.error = r.error || "";
-        render();
-      } catch (e) {
-        ptest.error = e.message;
-        render();
-      }
-    };
-    s.append(ta, run);
-    if (ptest.error) s.append(el("p", "pr-err", ptest.error));
-    if (ptest.out) s.append(el("pre", "pr-diff", ptest.out));
-    return s;
-  }
-
-  function pluginsPane() {
-    const s = el("div", "pr-body");
-    s.append(el("p", "pr-note", t("A gateway plugin is a program of your own that every request goes through, inside magpie: it is told the agent, the model and the provider, and may hand back the body the vendor gets. Any language, one HTTP endpoint.")));
-    const grid = el("div", "pr-grid");
-    for (const p of plugins?.plugins || []) grid.append(pluginCard(p));
-    const add = el("button", "pr-card", "＋ " + t("New gateway plugin"));
-    add.type = "button";
-    add.onclick = () => { pdraft = { id: "", url: "", agents: [], usage: false, timeout: "" }; ptest = null; render(); };
-    grid.append(add);
-    s.append(grid);
-    if (pdraft) s.append(pluginEditor());
-    if (err) s.append(el("p", "pr-err", err));
-    return s;
   }
 
   ctx.slots.add("page", {
@@ -555,6 +579,5 @@ magpie.plugin("presets", (ctx) => {
     html: `<div class="presets-page" id="presetsRoot"></div>`,
     open: () => (tab === "plugins" ? loadPlugins() : load()),
     relang: () => render(),
-    title: "Agent presets",
   });
 });

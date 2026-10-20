@@ -1,79 +1,120 @@
-/* The Agent presets page: a card per preset, its patches under the card,
-   and the agents each preset is given to. */
-.pr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pr-head .grow { flex: 1; }
-.pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 12px; margin: 12px 0 4px; }
-.pr-card { display: flex; flex-direction: column; gap: 7px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 11px;
-  background: var(--card); text-align: left; cursor: default; transition: border-color .12s, background .12s; }
-.pr-card:hover { border-color: var(--muted); }
-.pr-card.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.pr-card.cur { background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
-button.pr-card { border-style: dashed; color: var(--muted); align-items: center; justify-content: center; min-height: 84px; font-size: 12.5px; }
-button.pr-card:hover { color: var(--fg); }
-.pr-card .nm { display: flex; align-items: baseline; gap: 6px; font-weight: 600; }
-.pr-card .nm .ver { font-weight: 400; font-size: 11px; opacity: .6; }
-.pr-card .sub { font-size: 12px; opacity: .75; min-height: 2.6em; }
-.pr-card .cnt { display: flex; gap: 12px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); flex-wrap: wrap; }
-.pr-card .cnt b { font-weight: 600; color: var(--fg-2); }
-.pr-card .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
-.pr-card .kind { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); font-weight: 600; }
-.pr-card .ver { font-size: 10.5px; color: var(--faint); font-weight: 400; }
-.pr-body { margin: 12px 0 0; display: grid; gap: 12px; }
-.pr-sec { border: 1px solid var(--line, #2a2f36); border-radius: 10px; padding: 10px 12px; }
-.pr-sec h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
-.pr-about { font-size: 12px; opacity: .8; white-space: pre-wrap; }
-/* a patch: its kind, what it does, what it matches, the text, and its switch.
-   The two picks are the window's menu (a .proto.pick), so they come with
-   their own look; only the fields and the text need a width here. */
-.pr-row { display: grid; grid-template-columns: minmax(112px, auto) minmax(104px, auto) minmax(140px, 1.1fr) minmax(160px, 1.4fr) auto;
-  gap: 8px; align-items: start; margin: 8px 0; }
-.pr-row .proto.pick { height: 26px; }
-.pr-row .set-field { width: 100%; height: 26px; }
-.pr-row .pr-value { min-height: 3.2em; resize: vertical; }
-.pr-row .pr-none { color: var(--faint); font-size: 12px; padding-top: 6px; }
-textarea.pr-value { width: 100%; box-sizing: border-box; padding: 6px 9px; border-radius: 7px; border: 1px solid var(--line);
-  background: var(--card); color: var(--fg); font: inherit; font-size: 12.5px; line-height: 1.5; outline: none;
-  transition: border-color .12s, box-shadow .12s; }
-textarea.pr-value:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
-.pr-row .off { opacity: .55; }
-.pr-diff { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; white-space: pre-wrap; max-height: 220px; overflow: auto; padding: 8px; border-radius: 8px; background: rgba(127,127,127,.06); }
-.pr-bind { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px 16px; font-size: 12px; }
-/* the present: one pick for every agent, and the agents left out below it */
-.pr-row-line { display: flex; align-items: center; gap: 10px; min-height: 30px; }
-.pr-lbl { font-size: 12px; color: var(--muted); min-width: 64px; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
-.chip { font-size: 11.5px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line);
-  background: var(--pill); color: var(--fg-2); cursor: default; transition: color .12s, border-color .12s; }
-.chip:hover { color: var(--fg); border-color: var(--muted); }
-.pr-err { color: var(--err, #d9534f); font-size: 12px; }
-.pr-note { font-size: 11px; opacity: .65; }
-/* a gateway plugin's card: its address, what it has answered, its health */
-.pr-card .pr-field { display: flex; flex-direction: column; gap: 4px; }
-.pr-sec > label { display: block; font-size: 12px; font-weight: 600; margin-top: 10px; color: var(--fg-2); }
-.pr-sec > .pr-field input:not([type="checkbox"]), .pr-sec > .pr-field select, .pr-sec > .pr-field textarea,
-.pr-sec .pr-field > input, .pr-sec .pr-field > select {
-  height: 27px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line);
-  background: var(--card); color: var(--fg); font-size: 12.5px; outline: none; width: 100%;
-  transition: border-color .12s, box-shadow .12s;
-}
-.pr-sec textarea { height: auto; padding: 7px 9px; font-family: var(--code); font-size: 12px; line-height: 1.5; resize: vertical; }
-.pr-sec .pr-field > input:focus, .pr-sec .pr-field > select:focus, .pr-sec textarea:focus {
-  border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.pr-sec input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--accent); }
-.pr-sec > .pr-field { margin-bottom: 4px; }
-.pr-sec .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.pr-sec .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--pill); color: var(--fg-2); cursor: pointer; }
-.pr-sec .chip:hover { color: var(--fg); border-color: var(--muted); }
+/* The Agent presets page, and the dialogs it opens.
 
-/* the agent picker: a searchable grid of five a row, the window's own
-   proto-menu with a column class */
-.proto-menu.pm-5col { width: min(560px, 92vw); }
-.proto-menu.pm-5col .pm-item { width: auto; }
-.proto-menu.pm-5col .pm-head + .sc-top + .pm-item,
-.proto-menu.pm-5col .pm-item:first-of-type { margin-top: 2px; }
-.proto-menu.pm-5col { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; max-height: 60vh; overflow: auto; }
-.proto-menu.pm-5col .pm-head, .proto-menu.pm-5col .sc-top { grid-column: 1 / -1; }
-.proto-menu.pm-5col .pm-item { padding: 6px 8px; }
-.proto-menu.pm-5col .pm-item .pm-name { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.proto-menu.pm-5col .pm-item .pm-note { display: none; }
+   The window's own surfaces, one step quieter: the page is a column of
+   cards and sections, a card is a surface with a hairline, and anything
+   edited or picked opens a centred dialog (magpie's .modal), the way
+   shadcn's dialog reads — header, a body that scrolls, a footer of
+   actions. No control here is native: a pick is .proto.pick, a switch
+   .lib-switch, a field .set-field, and a button one of the two below. */
+
+.presets-page { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---- page chrome ---- */
+.pr-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pr-head .grow { flex: 1; }
+.pr-note { margin: 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.pr-err { margin: 0; font-size: 12px; line-height: 1.5; color: var(--red); }
+.pr-dash { color: var(--faint); font-size: 12px; }
+.pr-lbl { font-size: 12px; color: var(--muted); }
+
+/* the two buttons of the page, as the window's text buttons read */
+.btn-s { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 11px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg-2);
+  font: inherit; font-size: 12.5px; white-space: nowrap; cursor: default;
+  transition: background .12s, border-color .12s, color .12s; }
+.btn-s:hover { background: var(--pill); color: var(--fg); border-color: var(--muted); }
+.btn-p { display: inline-flex; align-items: center; justify-content: center; height: 28px; padding: 0 13px;
+  border-radius: 8px; border: 1px solid transparent; background: var(--accent); color: var(--accent-fg);
+  font: inherit; font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: default;
+  transition: filter .12s; }
+.btn-p:hover { filter: brightness(1.08); }
+.btn-p:disabled, .btn-s:disabled { opacity: .5; }
+
+/* ---- the presets ---- */
+.pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.pr-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 15px 12px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+  cursor: default; transition: border-color .12s, box-shadow .12s; }
+.pr-card:hover { border-color: var(--muted); }
+.pr-card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pr-card.cur { background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.pr-card-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pr-card-name { font-size: 13.5px; font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-card-sub { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); min-height: 2.9em; }
+.pr-card-acts { display: flex; gap: 6px; margin-top: 2px; }
+.pr-card-acts .btn-s { height: 25px; padding: 0 9px; font-size: 12px; }
+.pr-card-acts .em { border-color: transparent; background: none; color: var(--accent); }
+.pr-card-acts .em:hover { background: var(--accent-soft); border-color: transparent; }
+.pr-cnt { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.pr-cnt i { font-style: normal; }
+.pr-cnt em { font-style: normal; color: var(--faint); }
+.pr-badge { flex: none; font-size: 10px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.pr-badge.ok { background: var(--green-soft); color: var(--green); }
+.pr-badge.warn { background: var(--amber-soft); color: var(--amber); }
+button.pr-card.pr-new { align-items: center; justify-content: center; min-height: 96px;
+  border-style: dashed; background: none; color: var(--muted); font: inherit; font-size: 12.5px; }
+button.pr-card.pr-new:hover { color: var(--fg); border-color: var(--muted); background: var(--card); }
+
+/* ---- a section of the page ---- */
+.pr-body { display: flex; flex-direction: column; gap: 14px; }
+.pr-sec { display: flex; flex-direction: column; gap: 8px; padding: 14px 15px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.pr-sec h3 { margin: 0; font-size: 12px; font-weight: 600; color: var(--fg); }
+.pr-line { display: flex; align-items: center; gap: 10px; min-height: 30px; flex-wrap: wrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--pill); color: var(--fg-2); font: inherit; font-size: 11.5px; cursor: default;
+  transition: border-color .12s, color .12s; }
+.chip:hover { color: var(--fg); border-color: var(--muted); }
+
+/* the recent runs: one line each, the model quiet, the counts at the end */
+.pr-runs { display: flex; flex-direction: column; }
+.pr-run { display: grid; grid-template-columns: 76px 120px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 5px 0; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line-2); }
+.pr-run:first-child { border-top: 0; }
+.pr-run-m { color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-run-c { font-variant-numeric: tabular-nums; color: var(--faint); }
+
+/* ---- the dialog (magpie's .modal, the page's own width and skin) ---- */
+.modal .editor.pr-dlg { width: min(760px, 100%); border-radius: 14px; }
+.modal .editor.pr-dlg.wide { width: min(860px, 100%); }
+.pr-dlg .ehead { padding: 0 18px; }
+.pr-dlg .ehead b { font-size: 14px; }
+.pr-dlg .ehead .note { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
+.pr-x { width: 26px; height: 26px; border-radius: 7px; font-size: 12px; color: var(--muted); background: none; border: 0; cursor: default; }
+.pr-x:hover { background: var(--pill); color: var(--fg); }
+.pr-dlg .ebody { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; }
+.pr-dlg .bar { gap: 8px; padding: 0 18px; }
+.pr-dlg .pr-sec { padding: 12px 13px; background: var(--card-2); }
+.pr-rows { display: flex; flex-direction: column; gap: 8px; }
+.pr-add { align-self: flex-start; height: 24px; padding: 0 9px; font-size: 12px; }
+.pr-prow { display: grid; grid-template-columns: auto auto minmax(120px, .9fr) minmax(160px, 1.4fr) auto;
+  gap: 8px; align-items: start; }
+.pr-prow .proto.pick { height: 28px; }
+.pr-prow .set-field { height: 28px; }
+.pr-prow.off { opacity: .5; }
+textarea.pr-value, textarea.pr-json { width: 100%; box-sizing: border-box; padding: 7px 9px;
+  border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg);
+  font: inherit; font-size: 12.5px; line-height: 1.5; outline: none; resize: vertical;
+  transition: border-color .12s, box-shadow .12s; }
+textarea.pr-json { font-family: var(--code); font-size: 11.5px; white-space: pre; overflow: auto; }
+textarea.pr-value:focus, textarea.pr-json:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.pr-tryrow { display: flex; align-items: center; gap: 8px; }
+.pr-diff { margin: 0; padding: 10px; border-radius: 8px; background: var(--pill); color: var(--fg-2);
+  font-family: var(--code); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; overflow: auto; max-height: 240px; }
+
+/* the fields of a gateway plugin */
+.pr-fields { display: flex; flex-direction: column; gap: 12px; }
+.pr-field { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 4px 14px; align-items: center; }
+.pr-field .pr-note { grid-column: 2; }
+
+/* the agent picker: a search box over a grid of five a row */
+.pr-search { margin-bottom: 10px; }
+.pr-agents { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; max-height: 46vh; overflow: auto; }
+.pr-agent { height: 46px; padding: 4px 8px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg-2); font: inherit; font-size: 11.5px; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; cursor: default;
+  transition: border-color .12s, background .12s, color .12s; }
+.pr-agent:hover { border-color: var(--muted); color: var(--fg); }
+.pr-agent.on { border-color: var(--accent); background: var(--accent-soft); color: var(--fg); font-weight: 600; }

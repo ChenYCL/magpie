@@ -9230,8 +9230,8 @@ function drawEditor(p, presetID) {
     const perAccount = subOf(a.agent) ? accountProxyPicker(a) : null;
     if (perAccount) proxies.append(perAccount);
     advIn.append(...field(t("Proxy"), proxies));
-  advIn.append(...field(t("Fingerprint"), fingerprintPicker(), t("What magpie's requests to this provider look like: which client's headers they carry. A signed-in account keeps its own client's unless the profile is kept on it.")));
-  advIn.append(...field(t("Proxy pool"), poolEditor(), t("Several exits for one vendor, picked in turn, each rested while it fails. An empty pool leaves Proxy and the global one deciding.")));
+    advIn.append(...field(t("Fingerprint"), fingerprintPicker(), t("What magpie's requests to this provider look like: which client's headers they carry. A signed-in account keeps its own client's unless the profile is kept on it.")));
+    advIn.append(...field(t("Proxy pool"), poolEditor(), t("Several exits for one vendor, picked in turn, each rested while it fails. An empty pool leaves Proxy and the global one deciding.")));
     advIn.append(...concurrencyField(p));
     advIn.append(...priceRateField());
     if (p.cline) advIn.append(...upstreamField());
@@ -9453,6 +9453,8 @@ function drawEditor(p, presetID) {
   const perKey = keyProxyPicker(p);
   if (perKey) proxies.append(perKey);
   advIn.append(...field(t("Proxy"), proxies));
+  advIn.append(...field(t("Fingerprint"), fingerprintPicker(), t("What magpie's requests to this provider look like: which client's headers they carry. A signed-in account keeps its own client's unless the profile is kept on it.")));
+  advIn.append(...field(t("Proxy pool"), poolEditor(), t("Several exits for one vendor, picked in turn, each rested while it fails. An empty pool leaves Proxy and the global one deciding.")));
   advIn.append(...concurrencyField(p));
   advIn.append(...priceRateField());
 

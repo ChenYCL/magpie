@@ -3792,6 +3792,10 @@ const I18N = {
     "Agent presets": "Agent 预设",
     "Set as current": "设为当前",
     "Preset for {agent}": "{agent} 的预设",
+    "How the exits are picked": "出口的挑选方式",
+    "Failures in a row that rest an exit": "连续失败多少次让出口休息",
+    "How long a rested exit stays out": "休息的出口停用多久",
+    "Rest after": "连续失败",
   },
   "zh-TW": {
     "None": "無",
@@ -7567,6 +7571,10 @@ const I18N = {
     "Agent presets": "Agent 預設",
     "Set as current": "設為目前",
     "Preset for {agent}": "{agent} 的預設",
+    "How the exits are picked": "出口的挑選方式",
+    "Failures in a row that rest an exit": "連續失敗多少次讓出口休息",
+    "How long a rested exit stays out": "休息的出口停用多久",
+    "Rest after": "連續失敗",
   },
   ja: {
     "None": "なし",
@@ -11344,6 +11352,10 @@ const I18N = {
     "Agent presets": "エージェントプリセット",
     "Set as current": "現在の設定にする",
     "Preset for {agent}": "{agent} のプリセット",
+    "How the exits are picked": "出口の選び方",
+    "Failures in a row that rest an exit": "連続で何回失敗したら出口を休ませるか",
+    "How long a rested exit stays out": "休ませた出口を止めておく時間",
+    "Rest after": "連続失敗",
   },
   de: {
     "None": "Keine",
@@ -15121,6 +15133,10 @@ const I18N = {
     "Agent presets": "Agenten-Presets",
     "Set as current": "Als aktuell setzen",
     "Preset for {agent}": "Preset für {agent}",
+    "How the exits are picked": "Wie die Ausgänge gewählt werden",
+    "Failures in a row that rest an exit": "Fehlschläge in Folge, die einen Ausgang ruhen lassen",
+    "How long a rested exit stays out": "Wie lange ein ruhender Ausgang draußen bleibt",
+    "Rest after": "Ruhen nach",
   },
 };
 

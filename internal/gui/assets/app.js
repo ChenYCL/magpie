@@ -8250,14 +8250,16 @@ function poolEditor() {
   const box = el("div", "stack");
   draft.pool = draft.pool || { exits: [] };
   if (!draft.pool.exits) draft.pool.exits = [];
-  const head = el("div", "row-head");
+  // how the exits are picked, how many failures rest one, and for how long
+  const head = el("div", "stack");
   const mode = el("select");
-  for (const [id, name] of [["", "round-robin"], ["random", "random"], ["least-latency", "least-latency"], ["sticky", "sticky"]]) {
+  for (const [id, name] of [["", t("round-robin")], ["random", t("random")], ["least-latency", t("least-latency")], ["sticky", t("sticky")]]) {
     const o = el("option", "", name);
     o.value = id;
     if ((draft.pool.mode || "") === id) o.selected = true;
     mode.append(o);
   }
+  mode.title = t("How the exits are picked");
   mode.onchange = () => { draft.pool.mode = mode.value; };
   const fails = el("input");
   fails.type = "number";
@@ -8265,13 +8267,19 @@ function poolEditor() {
   fails.value = draft.pool.failThreshold || "";
   fails.placeholder = "2";
   fails.style.width = "4em";
+  fails.title = t("Failures in a row that rest an exit");
   fails.oninput = () => { draft.pool.failThreshold = Number(fails.value) || 0; };
   const rest = el("input");
   rest.value = draft.pool.rest || "";
   rest.placeholder = "60s";
   rest.style.width = "5em";
+  rest.title = t("How long a rested exit stays out");
   rest.oninput = () => { draft.pool.rest = rest.value; };
-  head.append(mode, el("span", "grow"), fails, rest);
+  const line = el("div", "row-head");
+  line.append(mode, el("span", "grow"),
+    el("span", "lbl", t("Rest after")), fails,
+    el("span", "lbl", t("for")), rest);
+  head.append(line);
   box.append(head);
   for (const [i, e] of draft.pool.exits.entries()) {
     const r = el("div", "row-head");

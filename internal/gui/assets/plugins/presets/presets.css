@@ -85,7 +85,9 @@ button.pr-card.pr-new:hover { color: var(--fg); border-color: var(--muted); back
    a line of its own */
 .modal:has(.pr-dlg.pr-pick) .dialog { width: min(880px, 100%); }
 .pr-pick .pr-note { margin: 0; }
-.pr-dlg .ehead { padding: 0 18px; }
+.pr-dlg .ehead { padding: 0 14px 0 18px; gap: 10px; }
+.pr-dlg .ehead > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-dlg .ehead .grow { flex: 1 1 auto; }
 .pr-dlg .ehead b { font-size: 14px; }
 .pr-dlg .ehead .note { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
 .pr-x { width: 26px; height: 26px; border-radius: 7px; font-size: 12px; color: var(--muted); background: none; border: 0; cursor: default; }
@@ -93,7 +95,7 @@ button.pr-card.pr-new:hover { color: var(--fg); border-color: var(--muted); back
 /* the base .editor is a label/control grid and .modal .editor.framed > .ebody
    inherits its columns; this page's dialog is a single column, so both are
    overridden at the same or higher weight */
-.modal .editor.pr-dlg { display: flex; flex-direction: column; grid-template-columns: none; padding: 0; gap: 0; }
+.modal .editor.pr-dlg { display: flex; flex-direction: column; grid-template-columns: none; padding: 0; gap: 0; overflow: hidden; }
 .modal .editor.pr-dlg > .ebody { display: flex; flex-direction: column; align-items: stretch; gap: 14px;
   grid-template-columns: none; padding: 16px 18px; }
 .modal .editor.pr-dlg > .ebody > * { min-width: 0; width: auto; }
@@ -102,12 +104,16 @@ button.pr-card.pr-new:hover { color: var(--fg); border-color: var(--muted); back
 .pr-dlg .pr-sec { padding: 12px 13px; background: var(--card-2); }
 .pr-rows { display: flex; flex-direction: column; gap: 8px; }
 .pr-add { align-self: flex-start; height: 24px; padding: 0 9px; font-size: 12px; }
-.pr-prow { display: grid; grid-template-columns: auto auto minmax(120px, .9fr) minmax(160px, 1.4fr) auto;
+/* a patch: kind, action, match, value, its switch. The value column may
+   shrink to nothing, so a grid item's default min-width can't hold it open
+   (that is what pushed the rows past the dialog's edge) */
+.pr-prow { display: grid; grid-template-columns: minmax(84px, auto) minmax(84px, auto) minmax(90px, .85fr) minmax(0, 1.4fr) auto;
   gap: 8px; align-items: start; }
+.pr-prow > * { min-width: 0; }
 .pr-prow .proto.pick { height: 28px; }
 .pr-prow .set-field { height: 28px; width: 100%; }
 .pr-prow.off { opacity: .5; }
-textarea.pr-value, textarea.pr-json { width: 100%; box-sizing: border-box; padding: 7px 9px;
+textarea.pr-value, textarea.pr-json { display: block; width: 100%; max-width: 100%; box-sizing: border-box; padding: 7px 9px;
   border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg);
   font: inherit; font-size: 12.5px; line-height: 1.5; outline: none; resize: vertical;
   transition: border-color .12s, box-shadow .12s; }

@@ -3,28 +3,48 @@
 .pr-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pr-head .grow { flex: 1; }
 .pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 12px; margin: 12px 0 4px; }
-.pr-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line, #2a2f36); border-radius: 10px; background: var(--card, transparent); text-align: left; }
-.pr-card.on { border-color: var(--accent, #4c9aff); box-shadow: inset 0 0 0 1px var(--accent, #4c9aff); }
+.pr-card { display: flex; flex-direction: column; gap: 7px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 11px;
+  background: var(--card); text-align: left; cursor: default; transition: border-color .12s, background .12s; }
+.pr-card:hover { border-color: var(--muted); }
+.pr-card.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pr-card.cur { background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+button.pr-card { border-style: dashed; color: var(--muted); align-items: center; justify-content: center; min-height: 84px; font-size: 12.5px; }
+button.pr-card:hover { color: var(--fg); }
 .pr-card .nm { display: flex; align-items: baseline; gap: 6px; font-weight: 600; }
 .pr-card .nm .ver { font-weight: 400; font-size: 11px; opacity: .6; }
 .pr-card .sub { font-size: 12px; opacity: .75; min-height: 2.6em; }
-.pr-card .cnt { display: flex; gap: 10px; font-size: 11px; font-variant-numeric: tabular-nums; opacity: .8; flex-wrap: wrap; }
-.pr-card .cnt b { font-weight: 600; opacity: 1; }
+.pr-card .cnt { display: flex; gap: 12px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); flex-wrap: wrap; }
+.pr-card .cnt b { font-weight: 600; color: var(--fg-2); }
 .pr-card .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
-.pr-card .kind { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; opacity: .6; }
+.pr-card .kind { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); font-weight: 600; }
+.pr-card .ver { font-size: 10.5px; color: var(--faint); font-weight: 400; }
 .pr-body { margin: 12px 0 0; display: grid; gap: 12px; }
 .pr-sec { border: 1px solid var(--line, #2a2f36); border-radius: 10px; padding: 10px 12px; }
 .pr-sec h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
 .pr-about { font-size: 12px; opacity: .8; white-space: pre-wrap; }
-.pr-row { display: grid; grid-template-columns: 96px 92px 1fr 1fr auto; gap: 6px; align-items: start; margin: 6px 0; }
-.pr-row input, .pr-row select, .pr-row textarea { font: inherit; font-size: 12px; }
-.pr-row textarea { min-height: 3.4em; resize: vertical; }
+/* a patch: its kind, what it does, what it matches, the text, and its switch.
+   The two picks are the window's menu (a .proto.pick), so they come with
+   their own look; only the fields and the text need a width here. */
+.pr-row { display: grid; grid-template-columns: minmax(112px, auto) minmax(104px, auto) minmax(140px, 1.1fr) minmax(160px, 1.4fr) auto;
+  gap: 8px; align-items: start; margin: 8px 0; }
+.pr-row .proto.pick { height: 26px; }
+.pr-row .set-field { width: 100%; height: 26px; }
+.pr-row .pr-value { min-height: 3.2em; resize: vertical; }
+.pr-row .pr-none { color: var(--faint); font-size: 12px; padding-top: 6px; }
+textarea.pr-value { width: 100%; box-sizing: border-box; padding: 6px 9px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--card); color: var(--fg); font: inherit; font-size: 12.5px; line-height: 1.5; outline: none;
+  transition: border-color .12s, box-shadow .12s; }
+textarea.pr-value:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .pr-row .off { opacity: .55; }
 .pr-diff { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; white-space: pre-wrap; max-height: 220px; overflow: auto; padding: 8px; border-radius: 8px; background: rgba(127,127,127,.06); }
 .pr-bind { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px 16px; font-size: 12px; }
-.pr-bindrow { display: grid; grid-template-columns: minmax(96px, 1fr) minmax(120px, 1.1fr); gap: 8px; align-items: center; min-width: 0; }
-.pr-bindrow .pr-bindname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pr-bindrow select { min-width: 0; width: 100%; }
+/* the present: one pick for every agent, and the agents left out below it */
+.pr-row-line { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.pr-lbl { font-size: 12px; color: var(--muted); min-width: 64px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.chip { font-size: 11.5px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--pill); color: var(--fg-2); cursor: default; transition: color .12s, border-color .12s; }
+.chip:hover { color: var(--fg); border-color: var(--muted); }
 .pr-err { color: var(--err, #d9534f); font-size: 12px; }
 .pr-note { font-size: 11px; opacity: .65; }
 /* a gateway plugin's card: its address, what it has answered, its health */

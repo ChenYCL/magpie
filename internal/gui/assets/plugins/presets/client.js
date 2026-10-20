@@ -18,6 +18,22 @@ magpie.plugin("presets", (ctx) => {
   let ptest = null;       // { body, out, error } of a plugin's Try
   let pknown = [];
 
+  // ---- the window's own controls -------------------------------------------
+  // Nothing here is a native <select>: magpie draws a pick in its own menu
+  // (kernel.js's ui.menu), and a native one would be the one grey control in
+  // a page of magpie's. Same for the switch and the field.
+
+  const pick = (opts, value, onPick, head) => ctx.ui.menu(opts.map(([v, name]) => ({ v, name })), value, head || "", onPick);
+  const switchOn = (on, label, onChange) => ctx.ui.toggle(!!on, label, onChange);
+  function field(value, placeholder, onInput, cls) {
+    const i = el("input", "set-field" + (cls ? " " + cls : ""));
+    i.type = "text";
+    i.value = value || "";
+    if (placeholder) i.placeholder = placeholder;
+    i.oninput = () => onInput(i.value);
+    return i;
+  }
+
   const KINDS = { prompt: "Prompt", context: "Context", tools: "Tools" };
   const ACTIONS = {
     prompt: ["append", "prepend", "set", "drop"],
@@ -28,6 +44,9 @@ magpie.plugin("presets", (ctx) => {
   // presets in the order the cards show them
   const presets = () => (data?.presets || []);
   const byId = (id) => presets().find((p) => p.id === id) || null;
+  // Standard is the preset magpie serves by default: what it did before
+  // presets existed
+  const Standard = () => "standard";
   const cur = () => byId(sel) || presets()[0] || null;
 
   async function load() {
@@ -65,9 +84,8 @@ magpie.plugin("presets", (ctx) => {
   }
 
   function card(p) {
-    const isCur = p.id === (data.default || "");
-    const c = el("button", "pr-card" + (p.id === sel ? " on" : ""));
-    c.type = "button";
+    const isCur = p.id === (data.default || Standard());
+    const c = el("div", "pr-card" + (p.id === sel ? " on" : "") + (p.id === isCur ? " cur" : ""));
     const nm = el("div", "nm");
     nm.append(el("span", "", p.name || p.id));
     if (p.version) nm.append(el("span", "ver", "v" + p.version));
@@ -90,7 +108,12 @@ magpie.plugin("presets", (ctx) => {
     editB.onclick = (e) => { e.stopPropagation(); startEdit(p); };
     acts.append(curB, editB);
     c.append(acts);
-    c.onclick = () => { sel = p.id; trying = null; render(); };
+    c.onclick = (e) => {
+      if (e.target.closest("button")) return; // its own buttons act
+      sel = p.id;
+      trying = null;
+      render();
+    };
     return c;
   }
 
@@ -102,44 +125,23 @@ magpie.plugin("presets", (ctx) => {
 
   function patchRow(pa, i) {
     const r = el("div", "pr-row" + (pa.disabled ? " off" : ""));
-    const kind = el("select");
-    for (const k of ["prompt", "context", "tools"]) {
-      const o = el("option", "", t(KINDS[k]));
-      o.value = k;
-      if (k === pa.kind) o.selected = true;
-      kind.append(o);
-    }
-    kind.onchange = () => {
-      pa.kind = kind.value;
+    const kind = pick(["prompt", "context", "tools"].map((k) => [k, t(KINDS[k])]), pa.kind, (v) => {
+      pa.kind = v;
       if (!ACTIONS[pa.kind].includes(pa.action)) pa.action = ACTIONS[pa.kind][0];
       render();
-    };
-    const act = el("select");
-    for (const a of ACTIONS[pa.kind] || []) {
-      const o = el("option", "", a);
-      o.value = a;
-      if (a === pa.action) o.selected = true;
-      act.append(o);
-    }
-    act.onchange = () => { pa.action = act.value; render(); };
-    const match = el("input");
-    match.value = pa.match || "";
-    match.placeholder = pa.kind === "tools" ? "Read|Write|mcp__*" : pa.kind === "context" ? "CLAUDE.md|AGENTS.md|*.md" : "skills";
-    match.oninput = () => { pa.match = match.value; };
-    let value = null;
+    }, t("Kind"));
+    const act = pick((ACTIONS[pa.kind] || []).map((a) => [a, a]), pa.action, (v) => { pa.action = v; render(); }, t("Action"));
+    const match = field(pa.match, pa.kind === "tools" ? "Read|Write|mcp__*" : pa.kind === "context" ? "CLAUDE.md|AGENTS.md|*.md" : "skills", (v) => { pa.match = v; });
+    let value;
     if (pa.kind === "prompt" || (pa.kind === "tools" && pa.action === "rename")) {
-      value = el("textarea");
+      value = el("textarea", "pr-value");
       value.value = pa.value || "";
-      value.placeholder = pa.action === "rename" ? "new-name" : "text";
+      value.placeholder = pa.action === "rename" ? t("new name") : t("text");
       value.oninput = () => { pa.value = value.value; };
     } else {
-      value = el("span", "");
+      value = el("span", "pr-none", "—");
     }
-    const on = el("input");
-    on.type = "checkbox";
-    on.checked = !pa.disabled;
-    on.title = t("Off in this preset");
-    on.onchange = () => { pa.disabled = !on.checked; render(); };
+    const on = switchOn(!pa.disabled, t("Off in this preset"), (v) => { pa.disabled = !v; render(); });
     r.append(kind, act, match, value, on);
     return r;
   }
@@ -179,15 +181,9 @@ magpie.plugin("presets", (ctx) => {
     s.append(el("h3", "", t("Try a request")));
     s.append(el("p", "pr-note", t("Paste a request body (Chat Completions, Anthropic Messages, Responses or Gemini) and see what this preset makes of it: the body the vendor gets and what each patch did.")));
     trying = trying || { proto: "anthropic", body: SAMPLE, out: "", stats: null };
-    const proto = el("select");
-    for (const x of ["anthropic", "chat", "responses", "gemini"]) {
-      const o = el("option", "", x);
-      o.value = x;
-      if (x === trying.proto) o.selected = true;
-      proto.append(o);
-    }
-    proto.onchange = () => { trying.proto = proto.value; };
-    const body = el("textarea");
+    const proto = pick([["anthropic", "Anthropic Messages"], ["chat", "Chat Completions"], ["responses", "Responses"], ["gemini", "Gemini"]],
+      trying.proto, (v) => { trying.proto = v; }, t("API"));
+    const body = el("textarea", "pr-value");
     body.value = trying.body;
     body.rows = 10;
     body.oninput = () => { trying.body = body.value; };
@@ -278,41 +274,53 @@ magpie.plugin("presets", (ctx) => {
     return s;
   }
 
-  // one agent's row: its name, and the preset it gets (— for the default)
-  function bindRow(name, id, current, onPick) {
-    const r = el("div", "pr-bindrow");
-    r.append(el("span", "pr-bindname", name));
-    const sel = el("select");
-    const none = el("option", "", "— " + t("Default for new agents"));
-    none.value = "";
-    sel.append(none);
-    for (const p of presets()) {
-      const o = el("option", "", p.name || p.id);
-      o.value = p.id;
-      if (current === p.id) o.selected = true;
-      sel.append(o);
-    }
-    sel.onchange = () => onPick(sel.value);
-    if (id) sel.setAttribute("aria-label", t("Preset for {agent}", { agent: name }));
-    r.append(sel);
-    return r;
+  // the preset pick: every preset, and the choice to follow the default
+  function presetPick(current, onPick) {
+    const opts = [["", "— " + t("Follow the default")], ...presets().map((p) => [p.id, p.name || p.id])];
+    return pick(opts, current, onPick, t("Preset"));
   }
 
   function binding() {
     const s = el("section", "pr-sec");
-    s.append(el("h3", "", t("Given to")));
-    const grid = el("div", "pr-bind");
-    grid.append(bindRow(t("Default for new agents"), "", data.default || "", async (v) => {
-      await api("presets/bind", { default: true, preset: v }); await load();
+    s.append(el("h3", "", t("Every agent")));
+    const top = el("div", "pr-row-line");
+    top.append(el("span", "pr-lbl", t("Preset")));
+    top.append(presetPick(data.default || Standard(), async (v) => {
+      await api("presets/default", { preset: v });
+      await load();
     }));
-    // the agents magpie knows, each with the preset it gets
-    const known = data.known?.length ? data.known : (state?.agents || []).map((a) => ({ id: a.id, name: a.name }));
-    for (const a of known) {
-      grid.append(bindRow(a.name || a.id, a.id, (data.agents || {})[a.id] || "", async (v) => {
-        await api("presets/bind", { agent: a.id, preset: v }); await load();
-      }));
+    s.append(top);
+    s.append(el("p", "pr-note", t("One preset for every agent. An agent left out gets none: its requests go out as it sent them.")));
+
+    // the agents left out of it, as chips over a pick of the rest
+    const out = data.exclude || [];
+    const rest = (data.known || []).filter((a) => !out.includes(a.id));
+    const head = el("div", "pr-head");
+    head.append(el("h3", "", t("Leave an agent out")));
+    head.append(el("span", "grow"));
+    if (rest.length) {
+      head.append(pick([["", t("Pick an agent")], ...rest.map((a) => [a.id, a.name || a.id])], "", async (v) => {
+        if (!v) return;
+        await api("presets/exclude", { agent: v, excluded: true });
+        await load();
+      }, t("Agent")));
     }
-    s.append(grid);
+    s.append(head);
+    const chips = el("div", "chips");
+    if (!out.length) chips.append(el("span", "pr-none", t("None: every agent gets the preset above.")));
+    for (const id of out) {
+      const a = (data.known || []).find((x) => x.id === id);
+      const c = el("button", "chip", (a?.name || id) + " ×");
+      c.type = "button";
+      c.title = t("Put it back");
+      c.onclick = async () => {
+        await api("presets/exclude", { agent: id, excluded: false });
+        await load();
+      };
+      chips.append(c);
+    }
+    s.append(chips);
+    s.append(el("p", "pr-note", t("An agent left out gets no preset: its requests go out exactly as it sent them.")));
     return s;
   }
 
@@ -447,33 +455,16 @@ magpie.plugin("presets", (ctx) => {
       if (why) d.append(el("p", "pr-note", why));
       s.append(l, d);
     };
-    const idIn = el("input");
-    idIn.value = pdraft.id || "";
-    idIn.placeholder = "redteam";
-    idIn.oninput = () => { pdraft.id = idIn.value; };
+    const idIn = field(pdraft.id, "redteam", (v) => { pdraft.id = v; });
     row(t("Id"), idIn, t("One word: how the plugin is named in the ledger and here."));
 
-    const url = el("input");
-    url.value = pdraft.url || "";
-    url.placeholder = "http://127.0.0.1:8790";
-    url.oninput = () => { pdraft.url = url.value; };
+    const url = field(pdraft.url, "http://127.0.0.1:8790", (v) => { pdraft.url = v; });
     row(t("Address"), url, t("Where the plugin answers. magpie POSTs to /request and /usage there."));
 
-    const sel = el("select");
-    const every = el("option", "", t("Every agent"));
-    every.value = "";
-    sel.append(every);
-    for (const a of pknown) {
-      const o = el("option", "", a.name || a.id);
-      o.value = a.id;
-      if ((pdraft.agents || []).includes(a.id)) o.selected = true;
-      sel.append(o);
-    }
-    sel.onchange = () => {
-      const v = sel.value;
+    const sel = pick([["", t("Every agent")], ...pknown.map((a) => [a.id, a.name || a.id])], "", (v) => {
       pdraft.agents = v ? [...new Set([...(pdraft.agents || []), v])] : [];
       render();
-    };
+    }, t("Agent"));
     const chips = el("div", "chips");
     for (const a of pdraft.agents || []) {
       const c = el("button", "chip", a + " ×");
@@ -484,22 +475,13 @@ magpie.plugin("presets", (ctx) => {
     row(t("Agents"), (() => { const d = el("div", "stack"); d.append(sel, chips); return d; })(),
       t("Only these agents' requests go through it. Empty is every one."));
 
-    const usage = el("input");
-    usage.type = "checkbox";
-    usage.checked = !!pdraft.usage;
-    usage.onchange = () => { pdraft.usage = usage.checked; };
+    const usage = switchOn(pdraft.usage, t("Send it the ledger"), (v) => { pdraft.usage = v; });
     row(t("Send it the ledger"), usage, t("Usage rows, for a plugin that analyses traffic rather than editing it."));
 
-    const timeout = el("input");
-    timeout.value = pdraft.timeout || "";
-    timeout.placeholder = "1500ms";
-    timeout.oninput = () => { pdraft.timeout = timeout.value; };
+    const timeout = field(pdraft.timeout, "1500ms", (v) => { pdraft.timeout = v; });
     row(t("Timeout"), timeout, t("How long it has to answer a request. Past it, the request goes out as it came."));
 
-    const off = el("input");
-    off.type = "checkbox";
-    off.checked = !!pdraft.disabled;
-    off.onchange = () => { pdraft.disabled = off.checked; };
+    const off = switchOn(pdraft.disabled, t("Off"), (v) => { pdraft.disabled = v; });
     row(t("Off"), off, t("Saved without being asked."));
 
     s.append(pluginTry());

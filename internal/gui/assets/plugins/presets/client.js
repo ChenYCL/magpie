@@ -273,35 +273,39 @@ magpie.plugin("presets", (ctx) => {
     return s;
   }
 
+  // one agent's row: its name, and the preset it gets (— for the default)
+  function bindRow(name, id, current, onPick) {
+    const r = el("div", "pr-bindrow");
+    r.append(el("span", "pr-bindname", name));
+    const sel = el("select");
+    const none = el("option", "", "— " + t("Default for new agents"));
+    none.value = "";
+    sel.append(none);
+    for (const p of presets()) {
+      const o = el("option", "", p.name || p.id);
+      o.value = p.id;
+      if (current === p.id) o.selected = true;
+      sel.append(o);
+    }
+    sel.onchange = () => onPick(sel.value);
+    if (id) sel.setAttribute("aria-label", t("Preset for {agent}", { agent: name }));
+    r.append(sel);
+    return r;
+  }
+
   function binding() {
     const s = el("section", "pr-sec");
     s.append(el("h3", "", t("Given to")));
     const grid = el("div", "pr-bind");
-    const d = el("label", "", t("Default for new agents"));
-    const ds = el("select");
-    for (const p of presets()) {
-      const o = el("option", "", p.name || p.id);
-      o.value = p.id;
-      if (p.id === data.default) o.selected = true;
-      ds.append(o);
-    }
-    ds.onchange = async () => { await api("presets/bind", { default: true, preset: ds.value }); await load(); };
-    grid.append(d, ds);
+    grid.append(bindRow(t("Default for new agents"), "", data.default || "", async (v) => {
+      await api("presets/bind", { default: true, preset: v }); await load();
+    }));
+    // the agents magpie knows, each with the preset it gets
     const known = data.known?.length ? data.known : (state?.agents || []).map((a) => ({ id: a.id, name: a.name }));
     for (const a of known) {
-      const l = el("label", "", a.name || a.id);
-      const sel2 = el("select");
-      const none = el("option", "", "—");
-      none.value = "";
-      sel2.append(none);
-      for (const p of presets()) {
-        const o = el("option", "", p.name || p.id);
-        o.value = p.id;
-        if ((data.agents || {})[a.id] === p.id) o.selected = true;
-        sel2.append(o);
-      }
-      sel2.onchange = async () => { await api("presets/bind", { agent: a.id, preset: sel2.value }); await load(); };
-      grid.append(l, sel2);
+      grid.append(bindRow(a.name || a.id, a.id, (data.agents || {})[a.id] || "", async (v) => {
+        await api("presets/bind", { agent: a.id, preset: v }); await load();
+      }));
     }
     s.append(grid);
     return s;

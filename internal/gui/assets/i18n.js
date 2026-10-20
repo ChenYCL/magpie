@@ -3789,6 +3789,9 @@ const I18N = {
     "random": "随机",
     "least-latency": "最低延迟",
     "sticky": "固定",
+    "Agent presets": "Agent 预设",
+    "Set as current": "设为当前",
+    "Preset for {agent}": "{agent} 的预设",
   },
   "zh-TW": {
     "None": "無",
@@ -7561,6 +7564,9 @@ const I18N = {
     "random": "隨機",
     "least-latency": "最低延遲",
     "sticky": "固定",
+    "Agent presets": "Agent 預設",
+    "Set as current": "設為目前",
+    "Preset for {agent}": "{agent} 的預設",
   },
   ja: {
     "None": "なし",
@@ -11335,6 +11341,9 @@ const I18N = {
     "random": "ランダム",
     "least-latency": "最小遅延",
     "sticky": "固定",
+    "Agent presets": "エージェントプリセット",
+    "Set as current": "現在の設定にする",
+    "Preset for {agent}": "{agent} のプリセット",
   },
   de: {
     "None": "Keine",
@@ -15109,6 +15118,9 @@ const I18N = {
     "random": "Zufällig",
     "least-latency": "Geringste Latenz",
     "sticky": "Fixiert",
+    "Agent presets": "Agenten-Presets",
+    "Set as current": "Als aktuell setzen",
+    "Preset for {agent}": "Preset für {agent}",
   },
 };
 

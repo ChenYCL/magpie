@@ -21,6 +21,9 @@
 .pr-row textarea { min-height: 3.4em; resize: vertical; }
 .pr-row .off { opacity: .55; }
 .pr-diff { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; white-space: pre-wrap; max-height: 220px; overflow: auto; padding: 8px; border-radius: 8px; background: rgba(127,127,127,.06); }
-.pr-bind { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; align-items: center; font-size: 12px; }
+.pr-bind { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px 16px; font-size: 12px; }
+.pr-bindrow { display: grid; grid-template-columns: minmax(96px, 1fr) minmax(120px, 1.1fr); gap: 8px; align-items: center; min-width: 0; }
+.pr-bindrow .pr-bindname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pr-bindrow select { min-width: 0; width: 100%; }
 .pr-err { color: var(--err, #d9534f); font-size: 12px; }
 .pr-note { font-size: 11px; opacity: .65; }

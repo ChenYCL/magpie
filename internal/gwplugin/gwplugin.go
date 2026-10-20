@@ -222,7 +222,21 @@ func (p Plugin) Base() string {
 var (
 	mu    sync.Mutex
 	cache *Store
+	stamp fileStamp
 )
+
+// fileStamp is the file as it was when cache was read: a file another
+// process wrote (the CLI, an editor) is taken within a second, as
+// plugins.yml is.
+type fileStamp struct{ size int64; mod time.Time }
+
+func stampOf() fileStamp {
+	st, err := os.Stat(Path())
+	if err != nil {
+		return fileStamp{}
+	}
+	return fileStamp{size: st.Size(), mod: st.ModTime()}
+}
 
 // Load is the store as it is on disk, read once and kept until Save. A file
 // that can't be read is an empty store: a damaged file must not stop a
@@ -234,8 +248,10 @@ func Load() Store {
 }
 
 func load() Store {
-	if cache != nil {
+	if now := stampOf(); cache != nil && now == stamp {
 		return *cache
+	} else if cache != nil {
+		cache = nil
 	}
 	s := Store{}
 	b, err := os.ReadFile(Path())
@@ -246,6 +262,7 @@ func load() Store {
 		}
 	}
 	cache = &s
+	stamp = stampOf()
 	return *cache
 }
 
@@ -282,6 +299,7 @@ func write(s Store) error {
 		return err
 	}
 	cache = &s
+	stamp = stampOf()
 	return nil
 }
 

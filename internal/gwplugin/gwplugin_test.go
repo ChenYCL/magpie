@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -262,5 +264,25 @@ func TestDefaultsAreTheDocs(t *testing.T) {
 	p := Plugin{}
 	if p.TimeoutOr().Milliseconds() != 1500 || p.Failed() != 3 || p.Resting().Seconds() != 30 {
 		t.Fatalf("%s %d %s", p.TimeoutOr(), p.Failed(), p.Resting())
+	}
+}
+
+func TestAFileAnotherProcessWroteIsTaken(t *testing.T) {
+	home(t)
+	if len(All()) != 0 {
+		t.Fatal("not empty")
+	}
+	// the CLI, or an editor, writes the file behind this process's back
+	body := `{"plugins":[{"id":"cli","url":"http://x:1"}]}`
+	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Path(), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// a size change is seen at once; an equal one within the same second
+	// is the modtime's
+	if got := All(); len(got) != 1 || got[0].ID != "cli" {
+		t.Fatalf("a file written by another process wasn't taken: %+v", got)
 	}
 }

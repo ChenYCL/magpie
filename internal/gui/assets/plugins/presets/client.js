@@ -106,13 +106,21 @@ magpie.plugin("presets", (ctx) => {
     return { on: ps.length - off, total: ps.length, off };
   }
 
+  // A preset whose patches are all off changes nothing: it is magpie as it
+  // was, and says so rather than showing 0/1 three times.
   function counters(patches) {
+    const all = patches || [];
+    if (!all.length || all.every((p) => p.disabled)) {
+      return el("div", "pr-cnt pr-cnt-none", t("Changes nothing: magpie's own behaviour"));
+    }
     const row = el("div", "pr-cnt");
     for (const k of ["prompt", "context", "tools"]) {
-      const c = tally(patches, k);
+      const c = tally(all, k);
+      if (!c.total) continue;
       const s = el("span");
       s.append(el("i", "", t(KINDS[k])), document.createTextNode(` ${c.on}/${c.total}`));
-      if (c.off) s.append(el("em", "", ` · ${c.off}`));
+      // how many of them the preset leaves off, only where there are any
+      if (c.off) s.append(el("em", "", ` · ${t("Skipped")} ${c.off}`));
       row.append(s);
     }
     return row;

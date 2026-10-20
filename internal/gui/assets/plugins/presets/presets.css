@@ -105,7 +105,7 @@ button.pr-card.pr-new:hover { color: var(--fg); border-color: var(--muted); back
 .pr-prow { display: grid; grid-template-columns: auto auto minmax(120px, .9fr) minmax(160px, 1.4fr) auto;
   gap: 8px; align-items: start; }
 .pr-prow .proto.pick { height: 28px; }
-.pr-prow .set-field { height: 28px; }
+.pr-prow .set-field { height: 28px; width: 100%; }
 .pr-prow.off { opacity: .5; }
 textarea.pr-value, textarea.pr-json { width: 100%; box-sizing: border-box; padding: 7px 9px;
   border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg);
@@ -123,7 +123,24 @@ textarea.pr-value:focus, textarea.pr-json:focus { border-color: var(--accent); b
 .pr-field .pr-note { grid-column: 2; }
 
 /* the agent picker: a search box over a grid of five a row */
-.pr-search { width: 100%; margin-bottom: 10px; box-sizing: border-box; }
+/* Every field of this page: the app styles .set-field only inside a
+   .row.pref, which this page has none of, so the search box and the row
+   fields were the browser's own. Same shape as the window's fields. */
+.pr-dlg input.set-field, .presets-page input.set-field,
+.pr-search, .pr-field input, .pr-prow input {
+  height: 28px; padding: 0 10px; box-sizing: border-box;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); color: var(--fg);
+  font: inherit; font-size: 12.5px; outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.pr-dlg input.set-field:focus, .presets-page input.set-field:focus,
+.pr-search:focus, .pr-field input:focus, .pr-prow input:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.pr-dlg input.set-field::placeholder, .pr-search::placeholder, .pr-field input::placeholder, .pr-prow input::placeholder { color: var(--faint); }
+.pr-search { width: 100%; margin-bottom: 10px; }
+.pr-prow input { width: 100%; min-width: 0; }
 .pr-agents { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; max-height: 46vh; overflow: auto; }
 .pr-agent { height: 46px; padding: 4px 8px; border-radius: 9px; border: 1px solid var(--line);
   background: var(--card); color: var(--fg-2); font: inherit; font-size: 11.5px; line-height: 1.3;

@@ -292,25 +292,33 @@ magpie.plugin("presets", (ctx) => {
     s.append(top);
     s.append(el("p", "pr-note", t("One preset for every agent. An agent left out gets none: its requests go out as it sent them.")));
 
-    // the agents left out of it, as chips over a pick of the rest
+    // the agents left out: a chip each, and a menu that adds them — a
+    // searchable, multi-pick grid of five a row, closed by Done
     const out = data.exclude || [];
-    const rest = (data.known || []).filter((a) => !out.includes(a.id));
+    const byName = (a) => a?.name || a?.id || "";
     const head = el("div", "pr-head");
     head.append(el("h3", "", t("Leave an agent out")));
     head.append(el("span", "grow"));
-    if (rest.length) {
-      head.append(pick([["", t("Pick an agent")], ...rest.map((a) => [a.id, a.name || a.id])], "", async (v) => {
-        if (!v) return;
-        await api("presets/exclude", { agent: v, excluded: true });
-        await load();
-      }, t("Agent")));
-    }
+    const add = el("button", "proto pick", t("Add agents…"));
+    add.type = "button";
+    add.onclick = (ev) => {
+      ev.stopPropagation();
+      const rest = (data.known || []).filter((a) => !out.includes(a.id));
+      if (!rest.length) return;
+      openProtoMenu(add, rest.map((a) => ({ v: a.id, name: byName(a) })), [], (picked) => {
+        // Done: every pick excluded at once
+        if (!picked.length) return;
+        Promise.all(picked.map((id) => api("presets/exclude", { agent: id, excluded: true })))
+          .then(() => load());
+      }, t("Leave an agent out"), "pm-5col", "right", false, t("Find an agent"));
+    };
+    head.append(add);
     s.append(head);
     const chips = el("div", "chips");
     if (!out.length) chips.append(el("span", "pr-none", t("None: every agent gets the preset above.")));
     for (const id of out) {
       const a = (data.known || []).find((x) => x.id === id);
-      const c = el("button", "chip", (a?.name || id) + " ×");
+      const c = el("button", "chip", byName(a) + " ×");
       c.type = "button";
       c.title = t("Put it back");
       c.onclick = async () => {
@@ -461,10 +469,17 @@ magpie.plugin("presets", (ctx) => {
     const url = field(pdraft.url, "http://127.0.0.1:8790", (v) => { pdraft.url = v; });
     row(t("Address"), url, t("Where the plugin answers. magpie POSTs to /request and /usage there."));
 
-    const sel = pick([["", t("Every agent")], ...pknown.map((a) => [a.id, a.name || a.id])], "", (v) => {
-      pdraft.agents = v ? [...new Set([...(pdraft.agents || []), v])] : [];
-      render();
-    }, t("Agent"));
+    const sel = el("button", "proto pick", (pdraft.agents || []).length
+      ? (pdraft.agents.length === 1 ? pdraft.agents[0] : t("{n} agents", { n: pdraft.agents.length }))
+      : t("Every agent"));
+    sel.type = "button";
+    sel.onclick = (ev) => {
+      ev.stopPropagation();
+      openProtoMenu(sel, pknown.map((a) => ({ v: a.id, name: a.name || a.id })), [...(pdraft.agents || [])], (picked) => {
+        pdraft.agents = picked;
+        render();
+      }, t("Agent"), "pm-5col", "right", false, t("Find an agent"));
+    };
     const chips = el("div", "chips");
     for (const a of pdraft.agents || []) {
       const c = el("button", "chip", a + " ×");

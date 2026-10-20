@@ -3837,6 +3837,9 @@ const I18N = {
     "Put it back": "放回",
     "new name": "新名称",
     "text": "文本",
+    "Add agents…": "添加 Agent…",
+    "{n} agents": "{n} 个 Agent",
+    "Find an agent": "查找 Agent",
   },
   "zh-TW": {
     "None": "無",
@@ -7657,6 +7660,9 @@ const I18N = {
     "Put it back": "放回",
     "new name": "新名稱",
     "text": "文字",
+    "Add agents…": "新增 Agent…",
+    "{n} agents": "{n} 個 Agent",
+    "Find an agent": "尋找 Agent",
   },
   ja: {
     "None": "なし",
@@ -11479,6 +11485,9 @@ const I18N = {
     "Put it back": "戻す",
     "new name": "新しい名前",
     "text": "テキスト",
+    "Add agents…": "エージェントを追加…",
+    "{n} agents": "{n} エージェント",
+    "Find an agent": "エージェントを検索",
   },
   de: {
     "None": "Keine",
@@ -15301,6 +15310,9 @@ const I18N = {
     "Put it back": "Zurückholen",
     "new name": "neuer Name",
     "text": "Text",
+    "Add agents…": "Agenten hinzufügen…",
+    "{n} agents": "{n} Agenten",
+    "Find an agent": "Agenten suchen",
   },
 };
 

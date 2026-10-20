@@ -65,3 +65,15 @@ textarea.pr-value:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .pr-sec .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .pr-sec .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--pill); color: var(--fg-2); cursor: pointer; }
 .pr-sec .chip:hover { color: var(--fg); border-color: var(--muted); }
+
+/* the agent picker: a searchable grid of five a row, the window's own
+   proto-menu with a column class */
+.proto-menu.pm-5col { width: min(560px, 92vw); }
+.proto-menu.pm-5col .pm-item { width: auto; }
+.proto-menu.pm-5col .pm-head + .sc-top + .pm-item,
+.proto-menu.pm-5col .pm-item:first-of-type { margin-top: 2px; }
+.proto-menu.pm-5col { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; max-height: 60vh; overflow: auto; }
+.proto-menu.pm-5col .pm-head, .proto-menu.pm-5col .sc-top { grid-column: 1 / -1; }
+.proto-menu.pm-5col .pm-item { padding: 6px 8px; }
+.proto-menu.pm-5col .pm-item .pm-name { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proto-menu.pm-5col .pm-item .pm-note { display: none; }

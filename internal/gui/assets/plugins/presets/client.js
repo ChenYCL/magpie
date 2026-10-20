@@ -53,8 +53,8 @@ magpie.plugin("presets", (ctx) => {
   // body that scrolls, a footer of actions. magpie's own .modal is used, so
   // it sits over the window, closes on Escape and on a click outside, and
   // gives the keyboard back where it was.
-  function dialog({ title, note, body, actions, wide }) {
-    const ed = el("div", "editor framed pr-dlg" + (wide ? " wide" : ""));
+  function dialog({ title, note, body, actions, wide, picker }) {
+    const ed = el("div", "editor framed pr-dlg" + (wide ? " wide" : "") + (picker ? " pr-pick" : ""));
     const head = el("div", "ehead");
     head.append(el("b", "", title));
     if (note) head.append(el("span", "note", note));
@@ -364,7 +364,7 @@ magpie.plugin("presets", (ctx) => {
       ]);
       await load();
     }, "primary");
-    dialog({ title: t("Leave an agent out"), note: `${all.length}`, body, actions: [btn(t("Cancel"), () => closeModal()), done] });
+    dialog({ title: t("Leave an agent out"), note: `${all.length}`, body, actions: [btn(t("Cancel"), () => closeModal()), done], picker: true });
     search.focus({ preventScroll: true });
   }
 

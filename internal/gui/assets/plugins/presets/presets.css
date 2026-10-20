@@ -77,14 +77,27 @@ button.pr-card.pr-new:hover { color: var(--fg); border-color: var(--muted); back
 .pr-run-c { font-variant-numeric: tabular-nums; color: var(--faint); }
 
 /* ---- the dialog (magpie's .modal, the page's own width and skin) ---- */
-.modal .editor.pr-dlg { width: min(760px, 100%); border-radius: 14px; }
-.modal .editor.pr-dlg.wide { width: min(860px, 100%); }
+/* the dialog is .modal's own .dialog; widen it where this page's editor is
+   inside, so the patches' five columns have room */
+.modal:has(.pr-dlg) .dialog { width: min(780px, 100%); }
+.modal:has(.pr-dlg.wide) .dialog { width: min(900px, 100%); }
+/* the agent picker is a grid of five: it needs the room, and its search is
+   a line of its own */
+.modal:has(.pr-dlg.pr-pick) .dialog { width: min(880px, 100%); }
+.pr-pick .pr-note { margin: 0; }
 .pr-dlg .ehead { padding: 0 18px; }
 .pr-dlg .ehead b { font-size: 14px; }
 .pr-dlg .ehead .note { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
 .pr-x { width: 26px; height: 26px; border-radius: 7px; font-size: 12px; color: var(--muted); background: none; border: 0; cursor: default; }
 .pr-x:hover { background: var(--pill); color: var(--fg); }
-.pr-dlg .ebody { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; }
+/* the base .editor is a label/control grid and .modal .editor.framed > .ebody
+   inherits its columns; this page's dialog is a single column, so both are
+   overridden at the same or higher weight */
+.modal .editor.pr-dlg { display: flex; flex-direction: column; grid-template-columns: none; padding: 0; gap: 0; }
+.modal .editor.pr-dlg > .ebody { display: flex; flex-direction: column; align-items: stretch; gap: 14px;
+  grid-template-columns: none; padding: 16px 18px; }
+.modal .editor.pr-dlg > .ebody > * { min-width: 0; width: auto; }
+.modal .editor.pr-dlg > .ebody > .pr-note { width: 100%; }
 .pr-dlg .bar { gap: 8px; padding: 0 18px; }
 .pr-dlg .pr-sec { padding: 12px 13px; background: var(--card-2); }
 .pr-rows { display: flex; flex-direction: column; gap: 8px; }
@@ -110,7 +123,7 @@ textarea.pr-value:focus, textarea.pr-json:focus { border-color: var(--accent); b
 .pr-field .pr-note { grid-column: 2; }
 
 /* the agent picker: a search box over a grid of five a row */
-.pr-search { margin-bottom: 10px; }
+.pr-search { width: 100%; margin-bottom: 10px; box-sizing: border-box; }
 .pr-agents { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; max-height: 46vh; overflow: auto; }
 .pr-agent { height: 46px; padding: 4px 8px; border-radius: 9px; border: 1px solid var(--line);
   background: var(--card); color: var(--fg-2); font: inherit; font-size: 11.5px; line-height: 1.3;

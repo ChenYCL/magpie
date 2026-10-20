@@ -113,6 +113,9 @@ button.pr-card.pr-new:hover { color: var(--fg); border-color: var(--muted); back
 .pr-prow .proto.pick { height: 28px; }
 .pr-prow .set-field { height: 28px; width: 100%; }
 .pr-prow.off { opacity: .5; }
+/* a patch's text is read at a glance: give it room rather than two cut
+   lines with a scrollbar */
+.pr-prow textarea.pr-value { min-height: 62px; }
 textarea.pr-value, textarea.pr-json { display: block; width: 100%; max-width: 100%; box-sizing: border-box; padding: 7px 9px;
   border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg);
   font: inherit; font-size: 12.5px; line-height: 1.5; outline: none; resize: vertical;

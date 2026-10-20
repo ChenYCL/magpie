@@ -479,6 +479,12 @@ func (s *Server) record(c Call) {
 	}
 }
 
+// PresetsRecent is what the presets middleware (plugins/presets) kept of
+// the last requests it edited: set by that plugin, nil while it is off.
+// The window's Agent presets page reads it, which is why the record comes
+// through core rather than from a plugin package core may not link.
+var PresetsRecent func() any
+
 // WhileServing is work only the magpie serving the gateway does, begun
 // once it is bound and ended with it: one of the magpies running, never
 // two at once.
@@ -3920,6 +3926,8 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		m := gjson.GetBytes(body, "model").String()
 		base = provider.MantleBase(base, m, !s.fits(p.ID, mantleRouteKey(m), to))
 	}
+	// the provider's fingerprint of the body, where it asked for one
+	body = fingerprintBody(p, body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -4007,6 +4015,10 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	if err := p.Sign(ctx, req, to, body); err != nil {
 		return nil, err
 	}
+	// the provider's own fingerprint, last: what the vendor sees of who
+	// asked (internal/fingerprint). Its Body setting already shaped the
+	// body where the request was built.
+	applyFingerprint(p, req)
 	// a sign-in its vendor revoked isn't sent again: the next member is
 	// asked, and the agent told to sign in again (#1793)
 	if why, ok := provider.RevokedSignIn(p.Account, req); ok {

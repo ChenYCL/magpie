@@ -2832,6 +2832,9 @@ The gateway and usage:
   readings over time, for the Usage page's charts
 - `usage-alerts.json` — the usage alerts already shown, so a restart
   doesn't show them again
+- `presets.json` — agent presets: the user's own, the edits of the ones
+  magpie ships, and the preset each agent gets
+  ([Agent presets](subsystems/agent-presets.md))
 - `client-shapes.json` — the headers the gateway last let through for each
   client, for a test from the CLI
 - `gateway-sessions-hidden.json` — gateway sessions you deleted

@@ -27,8 +27,10 @@ import (
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/proxypool"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
+	"github.com/yetone/magpie/internal/fingerprint"
 )
 
 // Protocol is a wire API magpie can speak to an upstream.
@@ -280,6 +282,18 @@ type Provider struct {
 	// added takes it (TakesInsecureTLS), and only for the hosts of its own
 	// base URLs (UncheckedHosts); see Via.
 	InsecureTLS bool `json:"insecureTLS,omitempty"`
+
+	// ProxyPool is the provider's own pool of proxies: several exits for
+	// one vendor, tried in turn, each taken out of the rotation while it
+	// fails (internal/proxypool). An empty pool leaves Proxy, the
+	// account's own proxy, and the global one to decide, as before.
+	ProxyPool proxypool.Pool `json:"proxyPool,omitempty"`
+
+	// Fingerprint is what magpie's requests to this provider look like:
+	// the client they imitate (its headers), and whether the body is
+	// shaped to it too (internal/fingerprint). Empty is magpie's own
+	// User-Agent and nothing else, as before.
+	Fingerprint fingerprint.Assign `json:"fingerprint,omitempty"`
 
 	// Proxy is the proxy magpie's requests to this provider go through
 	// (#237: Codex through one, a vendor at home without): "" follows
@@ -788,6 +802,17 @@ func Save(p Provider) error {
 	if err := settings.CheckProxy(p.Proxy); err != nil {
 		return err
 	}
+	if err := p.ProxyPool.Valid(); err != nil {
+		return err
+	}
+	if p.Fingerprint.Custom != nil {
+		if err := p.Fingerprint.Custom.Valid(); err != nil {
+			return err
+		}
+	}
+	if p.Fingerprint.Profile != "" && p.Fingerprint.Custom == nil && fingerprint.Get(p.Fingerprint.Profile) == nil {
+		return fmt.Errorf("%q is no fingerprint magpie knows: pick one of %s, or write your own", p.Fingerprint.Profile, strings.Join(fingerprint.Ids(), ", "))
+	}
 	if err := checkAccountProxies(p.AccountProxies); err != nil {
 		return err
 	}
@@ -804,7 +829,7 @@ func Save(p Provider) error {
 		if p.ID == "kiro" {
 			key = p.Key
 		}
-		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, PickedFrom: p.PickedFrom, Delisted: p.Delisted, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, QuotaRest: p.QuotaRest, QuotaResetAt: p.QuotaResetAt, RestCap: p.RestCap, PinUpstream: p.PinUpstream, NativeCompaction: p.NativeCompaction, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
+		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, PickedFrom: p.PickedFrom, Delisted: p.Delisted, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Contexts: p.Contexts, Family: p.Family, Fingerprint: p.Fingerprint, ProxyPool: p.ProxyPool, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, QuotaRest: p.QuotaRest, QuotaResetAt: p.QuotaResetAt, RestCap: p.RestCap, PinUpstream: p.PinUpstream, NativeCompaction: p.NativeCompaction, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
 	} else {
 		p.AccountProxies = keyProxies(p) // a provider of keys proxies each key apart
 		if subscriptionID(p.ID) && !stored(p.ID) {
@@ -1204,6 +1229,10 @@ func keyOptional(p Provider) bool {
 }
 
 func normalize(p Provider) Provider {
+	// what the vendor is asked from, and what it sees of who asked: both
+	// as the editor leaves them (fingerprint.go, proxypool.go)
+	p.Fingerprint = normalFingerprint(p.Fingerprint)
+	p.ProxyPool = normalPool(p.ProxyPool)
 	p.ID = strings.ToLower(strings.TrimSpace(p.ID))
 	p.Name = strings.TrimSpace(p.Name)
 	p.Key = strings.TrimSpace(p.Key)
@@ -1789,4 +1818,45 @@ func SwitchedOff(id string) (Provider, bool) {
 		}
 	}
 	return Provider{}, false
+}
+
+// normalFingerprint is a fingerprint as it is saved: its profile id and its
+// own profile's header names trimmed, and the assignment dropped when it
+// names nothing.
+func normalFingerprint(a fingerprint.Assign) fingerprint.Assign {
+	a.Profile = strings.TrimSpace(a.Profile)
+	if a.Custom != nil {
+		c := *a.Custom
+		c.ID = strings.TrimSpace(c.ID)
+		c.Name = strings.TrimSpace(c.Name)
+		h := make(map[string]string, len(c.Headers))
+		for k, v := range c.Headers {
+			if k = strings.TrimSpace(k); k != "" {
+				h[k] = strings.TrimSpace(v)
+			}
+		}
+		c.Headers = h
+		a.Custom = &c
+	}
+	if a.Profile == "" && a.Custom == nil {
+		return fingerprint.Assign{}
+	}
+	return a
+}
+
+// normalPool is a pool as it is saved: each exit's address trimmed and a
+// pool with no exit dropped.
+func normalPool(p proxypool.Pool) proxypool.Pool {
+	out := proxypool.Pool{Mode: strings.TrimSpace(p.Mode), FailThreshold: p.FailThreshold, Rest: strings.TrimSpace(p.Rest), Disabled: p.Disabled}
+	for _, e := range p.Exits {
+		u := strings.TrimSpace(e.URL)
+		if u == "" {
+			continue
+		}
+		out.Exits = append(out.Exits, proxypool.Exit{URL: u, Label: strings.TrimSpace(e.Label), Weight: e.Weight, Disabled: e.Disabled})
+	}
+	if len(out.Exits) == 0 {
+		return proxypool.Pool{}
+	}
+	return out
 }

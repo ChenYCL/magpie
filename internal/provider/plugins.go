@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/plugin"
 )
 
@@ -640,6 +641,21 @@ func firstOf(ss ...string) string {
 // plugin's), the client the account asks for this request when it asks
 // for one (ZCode's Start Plan: zcodeStartClient), and client otherwise.
 func (p Provider) Do(client *http.Client, req *http.Request) (*http.Response, error) {
+	// the provider's proxy pool (internal/proxypool): the request goes
+	// through the pool's next exit — or the one this account is pinned to
+	// — and the pool learns from what comes back. No pool leaves the
+	// request as it was, its proxy the provider's own or the global one.
+	if choice, done, ok := poolPick(p, req); ok {
+		req = req.Clone(netproxy.With(req.Context(), choice))
+		res, err := p.do(client, req)
+		done(res, err)
+		return res, err
+	}
+	return p.do(client, req)
+}
+
+// do is Do with no pool of the provider's to pick from.
+func (p Provider) do(client *http.Client, req *http.Request) (*http.Response, error) {
 	if p.Account != nil && p.Account.transport != nil {
 		return p.Account.transport(req)
 	}

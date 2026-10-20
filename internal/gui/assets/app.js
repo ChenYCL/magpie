@@ -7921,6 +7921,12 @@ function asTyped() {
   if (xb.value) body.extraBody = xb.value;
   const proxy = draft.proxyMode === undefined ? null : proxyOfDraft();
   if (proxy !== null) body.proxy = proxy;
+  // what the vendor sees of who asked, and the exits a vendor is asked
+  // from (fingerprint.go, proxypool.go)
+  const fp = fingerprintOfDraft();
+  if (fp) body.fingerprint = fp;
+  const pl = poolOfDraft();
+  if (pl) body.proxyPool = pl;
   // asked unchecked as it would be saved; magpie takes it only for a
   // provider of the user's own
   body.insecureTLS = !!draft.insecureTLS;
@@ -8179,6 +8185,124 @@ function extraBodyOf(text) {
   }
   return { value: v };
 }
+// fingerprintOfDraft is the fingerprint a save sends, null for none: the
+// profile's id (a built-in's, or the user's own saved beside it), whether
+// the body is shaped to it too, and whether it stays on a signed-in
+// account's request.
+function fingerprintOfDraft() {
+  const f = draft.fingerprint;
+  if (!f || (!f.profile && !f.custom)) return null;
+  const out = {};
+  if (f.custom) out.custom = f.custom;
+  if (f.profile) out.profile = f.profile;
+  if (f.body) out.body = true;
+  if (f.lock) out.lock = true;
+  return out;
+}
+
+// fingerprintPicker is the Fingerprint row: which client magpie's requests
+// to this provider imitate. The profiles are the gateway's own
+// (internal/fingerprint), listed with what each imitates.
+const FINGERPRINTS = [
+  ["", "magpie", "magpie's own User-Agent, as before"],
+  ["claude-code", "Claude Code", "claude-cli, as Anthropic's own CLI sends it"],
+  ["codex-cli", "Codex CLI", "codex_cli_rs, as OpenAI's Codex sends it"],
+  ["opencode", "OpenCode", "opencode, as its CLI sends it"],
+  ["cline", "Cline", "Cline's desktop app, for Cline's free models"],
+  ["generic", "generic", "no headers of its own"],
+];
+
+function fingerprintPicker() {
+  const box = el("div", "stack");
+  const seg = el("div", "segs");
+  for (const [id, name] of FINGERPRINTS) {
+    const b = el("button", "opt" + ((draft.fingerprint?.profile || "") === id ? " on" : ""), name);
+    b.type = "button";
+    b.onclick = () => {
+      draft.fingerprint = { ...(draft.fingerprint || {}), profile: id };
+      for (const x of seg.querySelectorAll(".opt")) x.classList.toggle("on", x === b);
+    };
+    seg.append(b);
+  }
+  box.append(seg);
+  const [bt, bc] = tick(t("Shape the body to it too"), !!draft.fingerprint?.body);
+  bc.onchange = () => { draft.fingerprint = { ...(draft.fingerprint || {}), body: bc.checked }; };
+  const [lt, lc] = tick(t("Keep it on signed-in accounts"), !!draft.fingerprint?.lock);
+  lc.onchange = () => { draft.fingerprint = { ...(draft.fingerprint || {}), lock: lc.checked }; };
+  box.append(bt, lt);
+  return box;
+}
+
+// poolOfDraft is the proxy pool a save sends, null for one with no exit.
+function poolOfDraft() {
+  const p = draft.pool;
+  if (!p || !p.exits || !p.exits.length) return null;
+  const out = { exits: p.exits.map((e) => ({ url: (e.url || "").trim(), label: e.label || "", weight: e.weight || 0, disabled: !!e.disabled })) };
+  if (p.mode) out.mode = p.mode;
+  if (p.failThreshold) out.failThreshold = p.failThreshold;
+  if (p.rest) out.rest = p.rest;
+  return out;
+}
+
+// poolEditor is the Proxy pool row: several exits for one vendor, picked in
+// turn, each rested while it fails.
+function poolEditor() {
+  const box = el("div", "stack");
+  draft.pool = draft.pool || { exits: [] };
+  if (!draft.pool.exits) draft.pool.exits = [];
+  const head = el("div", "row-head");
+  const mode = el("select");
+  for (const [id, name] of [["", "round-robin"], ["random", "random"], ["least-latency", "least-latency"], ["sticky", "sticky"]]) {
+    const o = el("option", "", name);
+    o.value = id;
+    if ((draft.pool.mode || "") === id) o.selected = true;
+    mode.append(o);
+  }
+  mode.onchange = () => { draft.pool.mode = mode.value; };
+  const fails = el("input");
+  fails.type = "number";
+  fails.min = "0";
+  fails.value = draft.pool.failThreshold || "";
+  fails.placeholder = "2";
+  fails.style.width = "4em";
+  fails.oninput = () => { draft.pool.failThreshold = Number(fails.value) || 0; };
+  const rest = el("input");
+  rest.value = draft.pool.rest || "";
+  rest.placeholder = "60s";
+  rest.style.width = "5em";
+  rest.oninput = () => { draft.pool.rest = rest.value; };
+  head.append(mode, el("span", "grow"), fails, rest);
+  box.append(head);
+  for (const [i, e] of draft.pool.exits.entries()) {
+    const r = el("div", "row-head");
+    const url = el("input");
+    url.value = e.url || "";
+    url.placeholder = "http://127.0.0.1:7890";
+    url.oninput = () => { e.url = url.value; };
+    const label = el("input");
+    label.value = e.label || "";
+    label.placeholder = t("name");
+    label.style.width = "6em";
+    label.oninput = () => { e.label = label.value; };
+    const on = el("input");
+    on.type = "checkbox";
+    on.checked = !e.disabled;
+    on.onchange = () => { e.disabled = !on.checked; };
+    const del = el("button", "icon");
+    del.type = "button";
+    del.textContent = "×";
+    del.title = t("Remove");
+    del.onclick = () => { draft.pool.exits.splice(i, 1); renderProviders(); };
+    r.append(url, label, on, del);
+    box.append(r);
+  }
+  const add = el("button", "text sm", "＋ " + t("Exit"));
+  add.type = "button";
+  add.onclick = () => { draft.pool.exits.push({ url: "", label: "" }); renderProviders(); };
+  box.append(add);
+  return box;
+}
+
 function extraBodyEditor() {
   const box = el("div", "extra-body");
   const ta = el("textarea", "json");
@@ -8802,7 +8926,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, insecureTLS: !!p.insecureTLS, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), fingerprint: { profile: p.fingerprint?.profile || "", body: !!p.fingerprint?.body, lock: !!p.fingerprint?.lock, custom: p.fingerprint?.custom || null }, pool: { mode: p.proxyPool?.mode || "", failThreshold: p.proxyPool?.failThreshold || 0, rest: p.proxyPool?.rest || "", exits: (p.proxyPool?.exits || []).map((e) => ({ ...e })) }, icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, unredacted: !!p.unredacted, insecureTLS: !!p.insecureTLS, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -9106,6 +9230,8 @@ function drawEditor(p, presetID) {
     const perAccount = subOf(a.agent) ? accountProxyPicker(a) : null;
     if (perAccount) proxies.append(perAccount);
     advIn.append(...field(t("Proxy"), proxies));
+  advIn.append(...field(t("Fingerprint"), fingerprintPicker(), t("What magpie's requests to this provider look like: which client's headers they carry. A signed-in account keeps its own client's unless the profile is kept on it.")));
+  advIn.append(...field(t("Proxy pool"), poolEditor(), t("Several exits for one vendor, picked in turn, each rested while it fails. An empty pool leaves Proxy and the global one deciding.")));
     advIn.append(...concurrencyField(p));
     advIn.append(...priceRateField());
     if (p.cline) advIn.append(...upstreamField());

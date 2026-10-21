@@ -5030,6 +5030,10 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.CacheKey, req = "", &r
 		}
+		if want := to == provider.Responses && loadsInPlace(p) && s.fits(p.ID, additionalToolsItem, to); want != req.LoadedInPlace {
+			r := *req
+			r.LoadedInPlace, req = want, &r
+		}
 		if offEffort(req.Effort) && !s.fits(p.ID, offRefused(model), to) {
 			r := *req
 			r.Effort, req = onEffort(p, model), &r
@@ -5182,6 +5186,17 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
+		if req.LoadedInPlace && refusesField(res.StatusCode, b, additionalToolsItem) && bytes.Contains(body, []byte(`"`+additionalToolsItem+`"`)) {
+			// an upstream that turns the item away is asked again with the
+			// loaded tools among the others, and not sent it again: the
+			// prompt's prefix changes from here, as before #2660, and the
+			// log says so rather than the cache seeming kept
+			log.Printf("gateway: %s turned away additional_tools (%d); loaded tools go in tools from now on", p.ID, res.StatusCode)
+			s.markUnfit(p.ID, additionalToolsItem, to)
+			r := *req
+			r.LoadedInPlace, req = false, &r
+			continue
+		}
 		if to == provider.Anthropic && res.StatusCode == http.StatusBadRequest &&
 			samplingDeprecated.Match(b) && (req.Temp != nil || req.TopP != nil) {
 			// a Claude by a name samplingAsTaken can't read refuses the
@@ -5379,6 +5394,28 @@ var mandatoryReasoning = regexp.MustCompile(`(?i)reasoning is mandatory for this
 // that hasn't turned it away.
 func (s *Server) servesElsewhere(p provider.Provider, model string, proto provider.Protocol) bool {
 	return slices.ContainsFunc(s.usable(p, model), func(x provider.Protocol) bool { return x != proto })
+}
+
+// additionalToolsItem is the Responses input item a deferred tool goes to
+// the upstream in where a result loaded it (Request.LoadedInPlace); a
+// provider that refused it is remembered under it in unfit.
+const additionalToolsItem = "additional_tools"
+
+// loadsInPlace is whether p's Responses API is sent a tool an Anthropic
+// client's tool search loaded in an additional_tools item at the place it
+// was loaded (#2660): OpenAI's own API with a key, whose tool search guide
+// documents the item and that its tools load at the end of the context
+// so the cached prefix is kept, and a provider the user said takes it
+// (provider.Provider.AdditionalTools). Nothing else is: xAI's Responses
+// API answers 422 "unknown item type" (#350), the ChatGPT backend has
+// been seen to take it only for Codex's Responses Lite, and a relay or
+// plugin's vendor hasn't been tried.
+func loadsInPlace(p provider.Provider) bool {
+	if p.AdditionalTools {
+		return true
+	}
+	h := p.Host()
+	return p.Account == nil && !p.IsPlugin() && !p.IsAzure() && (h == "api.openai.com" || strings.HasSuffix(h, ".api.openai.com"))
 }
 
 // cacheKeyField is the client's prompt cache key as a request carries it

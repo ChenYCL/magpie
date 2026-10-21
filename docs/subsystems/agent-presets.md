@@ -95,3 +95,32 @@ A provider's `proxyPool` is several exits for one vendor:
   and mean latency this process has seen; `POST …/pool/rest` rests one by
   hand. The health is this process's: a restart forgets it, so
   `providers.json` stays the user's alone.
+
+## Absorbed from dsh-purge (WoYun520), 2026-10-21
+
+The redteam preset's prompt is the commander model: the lead plans,
+dispatches, verifies returns and reports, and never acts itself; a
+pre-flight lists missing resources before work starts; at most three
+executors run at once and the default is sequential through five phases;
+every dispatch brief opens with `redteamRole: <code>` and is
+self-contained; the report discipline is deltas only, on four triggers;
+the red lines (credentials are not accounts, a proxy on your own VPS is
+not a tunnel, findings must reproduce) ride in the brief.
+
+Not absorbed, and why:
+
+- **SQLite asset store, scoring board, sidebar console** — client-plane
+  machinery. A gateway preset edits request bodies; it cannot host a
+  database service or a UI panel.
+- **anchor-gate (bootstrap output cap)** — needs a max_tokens clamp per
+  preset. Our patch kinds (prompt/context/tools) cannot touch max_tokens
+  yet; adding a fourth kind is future work if red-team traffic ever
+  needs it.
+- **subagent spawner with role-tagged briefs** — the client owns
+  subagents. Our commander prompt tells the model to write
+  `redteamRole:` briefs into Task dispatches when its agent supports
+  them, which works for Claude Code's Task tool without gateway changes.
+
+The 18 redteam operational skills (recon-pipeline, nuclei-scan,
+gogo/fscan-intranet, suo5/frp tunnels, webshell-toolkit, …) are in the
+library from WoYun520/dsh-purge, given to claude and omp.

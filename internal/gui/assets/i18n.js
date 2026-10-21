@@ -3847,6 +3847,7 @@ const I18N = {
     "Paste a request body (Chat Completions, Anthropic Messages, Responses or Gemini) and see what this preset makes of it.": "粘贴一个请求体（Chat Completions、Anthropic Messages、Responses 或 Gemini），看这个预设想把它变成什么。",
     "A plugin that fails, times out or changes the model leaves the request exactly as it was.": "插件失败、超时或改动了模型时，请求会原样发出。",
     "Changes nothing: magpie's own behaviour": "不改任何請求：magpie 原本的行為",
+    "Remove this patch": "刪除此補丁",
   },
   "zh-TW": {
     "None": "無",
@@ -7677,6 +7678,7 @@ const I18N = {
     "Paste a request body (Chat Completions, Anthropic Messages, Responses or Gemini) and see what this preset makes of it.": "貼上一個請求主體（Chat Completions、Anthropic Messages、Responses 或 Gemini），看這個預設想把它變成什麼。",
     "A plugin that fails, times out or changes the model leaves the request exactly as it was.": "外掛失敗、逾時或改動了模型時，請求會原樣送出。",
     "Changes nothing: magpie's own behaviour": "何も変えません: magpie 本来の動作",
+    "Remove this patch": "このパッチを削除",
   },
   ja: {
     "None": "なし",
@@ -11509,6 +11511,7 @@ const I18N = {
     "Paste a request body (Chat Completions, Anthropic Messages, Responses or Gemini) and see what this preset makes of it.": "リクエスト本文（Chat Completions、Anthropic Messages、Responses、Gemini）を貼り付けて、このプリセットの結果を見ます。",
     "A plugin that fails, times out or changes the model leaves the request exactly as it was.": "失敗した、時間切れ、モデルを変えたプラグインはリクエストをそのままにします。",
     "Changes nothing: magpie's own behaviour": "Ändert nichts: magpies eigenes Verhalten",
+    "Remove this patch": "Diesen Patch entfernen",
   },
   de: {
     "None": "Keine",
@@ -15341,6 +15344,7 @@ const I18N = {
     "Paste a request body (Chat Completions, Anthropic Messages, Responses or Gemini) and see what this preset makes of it.": "Einen Anfrage-Body einfügen (Chat Completions, Anthropic Messages, Responses oder Gemini) und sehen, was dieses Preset daraus macht.",
     "A plugin that fails, times out or changes the model leaves the request exactly as it was.": "Ein Plugin, das scheitert, zu spät antwortet oder das Modell ändert, lässt die Anfrage genau wie sie war.",
     "Changes nothing: magpie's own behaviour": "不改任何请求：magpie 原本的行为",
+    "Remove this patch": "删除这个补丁",
   },
 };
 

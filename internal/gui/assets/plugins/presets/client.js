@@ -174,7 +174,7 @@ magpie.plugin("presets", (ctx) => {
     for (const kind of ["prompt", "context", "tools"]) {
       const c = tally(d.patches, kind);
       const rows = el("div", "pr-rows");
-      for (const pa of (d.patches || []).filter((x) => x.kind === kind)) rows.append(patchRow(pa));
+      for (const pa of (d.patches || []).filter((x) => x.kind === kind)) rows.append(patchRow(pa, d));
       const add = btn(t("Add a patch"), () => {
         d.patches = d.patches || [];
         const n = d.patches.filter((x) => x.kind === kind).length + 1;
@@ -196,6 +196,8 @@ magpie.plugin("presets", (ctx) => {
     actions.push(btn(t("Cancel"), () => { draft = null; closeModal(); }));
     actions.push(btn(t("Save"), async () => {
       err = "";
+      // a patch with no match says nothing: drop it, rather than refuse
+      draft.patches = (draft.patches || []).filter((pa) => pa.match.trim() !== "" || pa.disabled);
       try {
         await api("presets/save", draft);
         draft = null;
@@ -223,7 +225,7 @@ magpie.plugin("presets", (ctx) => {
     return s;
   }
 
-  function patchRow(pa) {
+  function patchRow(pa, d) {
     const r = el("div", "pr-prow" + (pa.disabled ? " off" : ""));
     r.append(pick(["prompt", "context", "tools"].map((k) => [k, t(KINDS[k])]), pa.kind, (v) => {
       pa.kind = v;
@@ -242,6 +244,15 @@ magpie.plugin("presets", (ctx) => {
       r.append(el("span", "pr-dash", "—"));
     }
     r.append(switchOn(!pa.disabled, t("Off in this preset"), (v) => { pa.disabled = !v; openPresetDialog(); }));
+    const rm = el("button", "pr-rowdel", "✕");
+    rm.type = "button";
+    rm.title = t("Remove this patch");
+    rm.setAttribute("aria-label", t("Remove this patch"));
+    rm.onclick = () => {
+      d.patches = (d.patches || []).filter((x) => x !== pa);
+      openPresetDialog();
+    };
+    r.append(rm);
     return r;
   }
 

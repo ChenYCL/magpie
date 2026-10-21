@@ -196,8 +196,11 @@ magpie.plugin("presets", (ctx) => {
     actions.push(btn(t("Cancel"), () => { draft = null; closeModal(); }));
     actions.push(btn(t("Save"), async () => {
       err = "";
-      // a patch with no match says nothing: drop it, rather than refuse
-      draft.patches = (draft.patches || []).filter((pa) => pa.match.trim() !== "" || pa.disabled);
+      // a patch that names nothing (match) and adds nothing (value) says
+      // nothing: drop it, rather than refuse the whole save over it.
+      // append/prepend carry their text in value, not match.
+      draft.patches = (draft.patches || []).filter((pa) =>
+        pa.disabled || pa.match.trim() !== "" || (["append","prepend"].includes(pa.action) && (pa.value||"").trim() !== ""));
       try {
         await api("presets/save", draft);
         draft = null;

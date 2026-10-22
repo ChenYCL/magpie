@@ -414,6 +414,29 @@ browser API is tried in the real Linux app too.
   `GOTOOLCHAIN=local` matches CI.
 - Seen 1× (2026-10-08).
 
+**A document's prose and a Go raw string are one thing: a line starting
+with three backticks ends the literal.**
+- 426c0aea's redteam preset gained the store's instructions as a raw
+  string; the prose inside it was markdown, and a line beginning with
+  ``` closed the Go literal, so the rest of the prose was parsed as code
+  (`missing ',' in composite literal` from line 102 on). The compiler
+  named the line after the break, not the line that broke it.
+- Keep backticks out of prose that goes into a raw string, or use a
+  quoted string with escapes. Read the first compile error's line for the
+  character that ended the literal, not for the syntax after it.
+- Seen 1× (2026-10-22).
+
+**A test's own store stands in for the real one; an assertion about the
+real one must say so.**
+- 426c0aea's GUI test asserted `present: false` before any engagement
+  while its stub returned a store that always existed, so it passed the
+  wrong idea and failed the right one. The route's `present: false` comes
+  from `os.Stat` on the real path, which a stub bypasses.
+- When a seam is stubbed, assert what the handler does with the stub's
+  data, and test the stub's own decision (here the missing file) at the
+  seam's default alone.
+- Seen 1× (2026-10-22).
+
 ## Concurrency and tests
 
 **A fake or child process a test starts ends when the test does**, and

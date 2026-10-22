@@ -63,3 +63,37 @@ amended rather than replaced; a `/24` is made once and linked twice; a
 domain gets no segment; the two sides stay apart; a score counts once; a
 credential and a vuln keep what an amend doesn't send; the lists read back;
 a POC is found from another engagement; the report's counts.
+
+## What was run for 426c0aea
+
+```text
+$ go test ./internal/redteamstore/
+ok  	github.com/yetone/magpie/internal/redteamstore	0.616s   (12 tests)
+
+$ CGO_ENABLED=0 go test ./internal/gateway/ -run RedteamMCP
+ok  	github.com/yetone/magpie/internal/gateway	0.233s   (5 tests)
+
+$ CGO_ENABLED=0 go test -tags nogui ./internal/gui/ -run Redteam
+ok  	github.com/yetone/magpie/internal/gui	0.070s
+```
+
+Live, in the running container (`magpie:chenycl-redteam`), with a gateway
+key, over `POST /mcp/magpie/redteam`:
+
+```text
+tools/list             → 27 tools
+engagement_begin       → eng-1792655101019-0001
+asset_add 203.0.113.77:443 → the host, and 203.0.113.0/24 linked "contains"
+score_hit server-host  → 20 points; the same call again answers already
+asset_test twice       → test is "smoke: 回写追加\n第二次尝试 → 401": appended
+report                 → assets 2, internet 1, scores 20, scoreRows 1
+GET /api/redteam       → present: true, the engagement
+GET /api/redteam/report→ present: true, the same counts
+```
+
+The smoke engagement was dropped and `redteam.db` removed afterwards, so
+the deployment starts with no engagement (the page says so, rather than
+showing an empty table).
+
+Not run: the whole suite, and a full five-phase engagement against a real
+authorized target.

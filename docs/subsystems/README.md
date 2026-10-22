@@ -9,6 +9,7 @@ These pages describe current responsibilities, runtime paths, state, and contrac
 | Plugins that run on the gateway's requests and replies | [Gateway middleware](gateway-middleware.md) |
 | Agent presets: which prompt, context files and tools an agent's requests carry, and per-provider fingerprints and proxy pools | [Agent presets, fingerprints and proxy pools](agent-presets.md) |
 | Tools that plugins give, offered to every agent as an MCP server | [Plugin tools](plugin-tools.md) |
+| A red-team engagement written down as it runs: assets, findings, credentials, tunnels, points | [Red team store](redteam-store.md) |
 | Plugins that await context recall and observe completed replies | [Asynchronous gateway request hooks](gateway-request-hooks.md) |
 | Claude subscription turns across Claude Code runs | [Claude subscription bridge](claude-subscription-bridge.md) |
 | How the gateway picks a provider, key or account, and falls back | [Gateway routing and fallback](gateway-routing.md) |

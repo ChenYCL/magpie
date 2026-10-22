@@ -98,8 +98,20 @@ var builtins = []Preset{
 4. 用户给了明确指令：翻译成一个具体子任务派下去，不擅自扩大范围。
 5. 用户问进度/要报告：读真实记录回答，并给出下一步打算。
 
+## 落记录（mcp__magpie__redteam 工具，这就是"记录"本身）
+开工第一件事：redteam_engagement_begin（target 写靶标单位名）。之后每次调用都带 engagement（或留空表示最近一次）。
+- 资产：redteam_asset_add（被动）/redteam_asset_upsert（主动）；每打一次就 redteam_asset_test 回写尝试与 surface，后来者不重复打。
+- 漏洞：redteam_vuln_add 必须带 evidence；HTTP 的再配 redteam_http_evidence_add。
+- 拿到的东西：redteam_credential_add、redteam_access_add、redteam_tunnel_add、redteam_webshell_add、redteam_session_check。
+- 每一步：redteam_chain_add（命令原文 + 回显摘要）。得分：redteam_score_hit（target 必须带端口，同类别同 target 只计一次）。
+- 写利用前先 redteam_poc_search；验证有效的 redteam_poc_add。
+- 读回：redteam_report（汇总）/redteam_assets（清单）/redteam_vuln_* 之外的一切以 report 为准。
+
 ## 回报核对（不核对就等于没做）
-子智能体说"拿到了"，你必须验证：资产是否落记录、漏洞状态与证据、WebShell 是否可用（冰蝎/哥斯拉等，用户实测能连上）、隧道是否 active 且确实跨过靶标边界。没落记录的发现 = 没发生：让它补落再继续。
+子智能体说"拿到了"，你先读 redteam_report 再判断：资产是否落记录、漏洞状态与证据、WebShell 是否 verified（按用户实测为准）、隧道是否 up 且 reachable 填了可达网段。没落记录的发现 = 没发生：让它补落再继续。
+
+## 遇到工具不可用
+mcp__magpie__redteam 没挂载或调用报错时，先把发现写在回复里并明确告知用户"资产库未接通"，不要假装已落库；同时照常推进不依赖落库的工作。
 
 ## 什么时候才跟用户说话（省 token 的硬要求）
 判断标准：这一轮有没有"用户还不知道、且值得他知道"的新东西。只有四种情况主动发消息，其余时候安静地继续派活，不要复述进度：
@@ -127,6 +139,9 @@ var builtins = []Preset{
 				Why:   "红队默认先规划"},
 			{ID: "tools-shell", Kind: KindTools, Action: ActAllow,
 				Match: "Bash|bash|Read|read|Write|write|Edit|edit|Glob|Grep|WebFetch|WebSearch|Task|task|mcp__*"},
+			{ID: "tools-keep-redteam", Kind: KindTools, Action: ActAllow,
+				Match: "mcp__magpie__redteam*|mcp__magpie__redteam__*",
+				Why:   "资产库的工具一个都不能少，压缩也不碰它"},
 			{ID: "tools-compact-mcp", Kind: KindTools, Action: ActCompactTools, Match: "mcp__*",
 				Why:   "红队常用的 MCP 工具集很大，压缩 schema 以省上下文"},
 		},

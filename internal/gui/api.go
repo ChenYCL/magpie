@@ -1125,6 +1125,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	importRoutes(mux)
 	usageRoutes(mux, w)
 	presetsRoutes(mux)
+	redteamRoutes(mux)
 	poolRoutes(mux)
 	gatewayPluginRoutes(mux)
 	callerKeyRoutes(mux)

@@ -437,6 +437,27 @@ real one must say so.**
   seam's default alone.
 - Seen 1× (2026-10-22).
 
+**A resolver that creates is for writes only; a read that resolves
+through it makes a row as a side effect.**
+- 86b372da's `redteam_engagement_open` read through `Target`, which
+  makes an engagement for an unknown name (the skills pass the unit's
+  name on any call, so writes resolve that way). A typo in a read would
+  have opened an empty engagement. `Open` answers the error instead.
+- Split the pair the day the second caller disagrees with the first's
+  side effect: `find`/`findOrCreate`, not one function with a flag the
+  read path forgets to pass.
+- Seen 1× (2026-10-22).
+
+**A finder that takes "id or target" must try the id first.**
+- `LinkAssets`' finder ran a target string through host/port parsing
+  first; an asset id has no port, so the parse "succeeded" with the id
+  as the host, no row matched, and the finder created a ghost asset
+  whose ip was the id. The graph test caught it by counting nodes.
+- When a parameter can be two kinds of key, test the cheaper exact
+  match before the fuzzy one, and let a test assert counts, not just
+  "no error".
+- Seen 1× (2026-10-22).
+
 ## Concurrency and tests
 
 **A fake or child process a test starts ends when the test does**, and

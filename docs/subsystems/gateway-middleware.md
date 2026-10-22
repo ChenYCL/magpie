@@ -67,3 +67,4 @@ node --test internal/gui/tests/plugin-middleware.test.cjs
 # in magpie-community/plugins: each package runs its cases.json through the hooks
 bun test packages/think-tags packages/model-map packages/param-override packages/system-prompt packages/word-guard packages/antigravity-cloak
 ```
+

@@ -210,7 +210,10 @@ func TestPresetValid(t *testing.T) {
 }
 
 func TestMatchDespiteStarsAndPipes(t *testing.T) {
-	cases := []struct{ pat, name string; want bool }{
+	cases := []struct {
+		pat, name string
+		want      bool
+	}{
 		{"CLAUDE.md", "/w/CLAUDE.md", true},
 		{"*.md", "/w/AGENTS.md", true},
 		{"**/*.md", "C:\\w\\AGENTS.md", true},

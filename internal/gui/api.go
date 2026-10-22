@@ -1128,6 +1128,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	redteamRoutes(mux)
 	poolRoutes(mux)
 	gatewayPluginRoutes(mux)
+	sandboxRoutes(mux)
 	callerKeyRoutes(mux)
 	sessionRoutes(mux, w)
 	sessionManageRoutes(mux, w)

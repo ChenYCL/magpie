@@ -1,0 +1,11 @@
+/* The Sandbox page: the plan's rows, and a command's answer under the Try. */
+.sb-page { padding: 0 0 40px; }
+.sb-head { padding: 24px 0 4px; }
+.sb-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.sb-body .row.pref { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.sb-body .row.pref .who { min-width: 0; }
+.sb-body .row.pref .name { font-size: 13px; }
+.sb-body .row.pref .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.sb-body .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sb-body .acts .set-field { min-width: 220px; }
+.sb-out { margin: 12px 0 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--fg); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }

@@ -66,10 +66,10 @@ func TestCanonicalRefusesWhatMagpieOwns(t *testing.T) {
 		}
 	}
 	cases := map[string]string{
-		"user-agent":                "User-Agent",
-		"x-stainless-lang":          "X-Stainless-Lang",
-		"anthropic-version":         "Anthropic-Version",
-		"x_app":                     "X_App",
+		"user-agent":        "User-Agent",
+		"x-stainless-lang":  "X-Stainless-Lang",
+		"anthropic-version": "Anthropic-Version",
+		"x_app":             "X_App",
 	}
 	for in, want := range cases {
 		if got, err := Canonical(in); err != nil || got != want {

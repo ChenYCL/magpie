@@ -189,9 +189,9 @@ type health struct {
 }
 
 type state struct {
-	mu sync.Mutex
-	by map[string]*health // by exit address
-	pin map[string]string // caller pin → exit address
+	mu  sync.Mutex
+	by  map[string]*health // by exit address
+	pin map[string]string  // caller pin → exit address
 }
 
 var (

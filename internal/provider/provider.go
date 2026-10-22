@@ -26,11 +26,11 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/fingerprint"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/proxypool"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
-	"github.com/yetone/magpie/internal/fingerprint"
 )
 
 // Protocol is a wire API magpie can speak to an upstream.

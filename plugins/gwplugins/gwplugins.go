@@ -18,8 +18,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/yetone/magpie/internal/gwplugin"
 	"github.com/yetone/magpie/internal/gwmw"
+	"github.com/yetone/magpie/internal/gwplugin"
 	"github.com/yetone/magpie/internal/pluginrt"
 	"github.com/yetone/magpie/internal/usage"
 )

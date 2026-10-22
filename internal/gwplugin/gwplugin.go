@@ -228,7 +228,10 @@ var (
 // fileStamp is the file as it was when cache was read: a file another
 // process wrote (the CLI, an editor) is taken within a second, as
 // plugins.yml is.
-type fileStamp struct{ size int64; mod time.Time }
+type fileStamp struct {
+	size int64
+	mod  time.Time
+}
 
 func stampOf() fileStamp {
 	st, err := os.Stat(Path())
@@ -462,8 +465,8 @@ func resting(id string) bool {
 
 // client is one HTTP client for every plugin.
 var client = &http.Client{Transport: &http.Transport{
-	MaxIdleConnsPerHost: 4,
-	IdleConnTimeout:     90 * time.Second,
+	MaxIdleConnsPerHost:   4,
+	IdleConnTimeout:       90 * time.Second,
 	ResponseHeaderTimeout: 0, // the request's context bounds it
 }}
 

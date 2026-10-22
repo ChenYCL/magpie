@@ -116,15 +116,15 @@ var builtins = []Profile{
 	{
 		ID: "claude-code", Name: "Claude Code", Sub: "claude-cli, as Anthropic's own CLI sends it",
 		Headers: map[string]string{
-			"User-Agent":                            "claude-cli/2.1.300 (external, cli)",
-			"X-App":                                 "cli",
-			"anthropic-version":                     "2023-06-01",
+			"User-Agent":        "claude-cli/2.1.300 (external, cli)",
+			"X-App":             "cli",
+			"anthropic-version": "2023-06-01",
 			"anthropic-dangerous-direct-browser-access": "true",
-			"X-Stainless-Lang":                      "js",
-			"X-Stainless-Package-Version":           "0.128.0",
-			"X-Stainless-OS":                        "MacOS",
-			"X-Stainless-Arch":                      "arm64",
-			"X-Stainless-Retry-Count":               "0",
+			"X-Stainless-Lang":                          "js",
+			"X-Stainless-Package-Version":               "0.128.0",
+			"X-Stainless-OS":                            "MacOS",
+			"X-Stainless-Arch":                          "arm64",
+			"X-Stainless-Retry-Count":                   "0",
 		},
 	},
 	{
@@ -180,11 +180,11 @@ func Ids() []string {
 // vendor's signing (which the account's client sets last), and the host
 // the request goes to.
 var forbidden = map[string]bool{
-	"Content-Type":  true,
-	"Content-Length": true,
-	"Authorization": true,
-	"Host":          true,
-	"Connection":    true,
+	"Content-Type":      true,
+	"Content-Length":    true,
+	"Authorization":     true,
+	"Host":              true,
+	"Connection":        true,
 	"Transfer-Encoding": true,
 }
 

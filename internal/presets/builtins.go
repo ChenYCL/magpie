@@ -34,8 +34,8 @@ var builtins = []Preset{
 	},
 	{
 		ID: "minimal", Name: "极简模式", Builtin: true, Order: 3,
-		Sub:   "Agent 使用终端和图片读取工具",
-		About: "只保留终端和图片读取：读、看、跑，不改文件。适合测试模型本身的能力，或与完整模式对比。上下文压缩仍可用。",
+		Sub:     "Agent 使用终端和图片读取工具",
+		About:   "只保留终端和图片读取：读、看、跑，不改文件。适合测试模型本身的能力，或与完整模式对比。上下文压缩仍可用。",
 		Isolate: map[string]bool{"compaction": true},
 		Patches: []Patch{
 			{ID: "prompt-minimal", Kind: KindPrompt, Action: ActSet, Match: "runtime-context",
@@ -58,8 +58,8 @@ var builtins = []Preset{
 	},
 	{
 		ID: "redteam", Name: "红队模式", Builtin: true, Order: 5,
-		Sub:   "攻防演练",
-		About: "发送一个靶标单位名称即可拉起红队智能体：主会话指挥 + 信息收集/资产梳理/漏洞发现/漏洞利用/内网渗透五个执行角色（并发最多 3 个，默认顺序派）。指挥官只计划、派活、核对回报、汇报，自己不动手。仅用于你被授权测试的目标。",
+		Sub:     "攻防演练",
+		About:   "发送一个靶标单位名称即可拉起红队智能体：主会话指挥 + 信息收集/资产梳理/漏洞发现/漏洞利用/内网渗透五个执行角色（并发最多 3 个，默认顺序派）。指挥官只计划、派活、核对回报、汇报，自己不动手。仅用于你被授权测试的目标。",
 		Isolate: map[string]bool{"compaction": true, "toolResultPruner": true},
 		Patches: []Patch{
 			{ID: "prompt-commander", Kind: KindPrompt, Action: ActAppend,
@@ -143,7 +143,7 @@ mcp__magpie__redteam 没挂载或调用报错时，先把发现写在回复里�
 				Match: "mcp__magpie__redteam*|mcp__magpie__redteam__*",
 				Why:   "资产库的工具一个都不能少，压缩也不碰它"},
 			{ID: "tools-compact-mcp", Kind: KindTools, Action: ActCompactTools, Match: "mcp__*",
-				Why:   "红队常用的 MCP 工具集很大，压缩 schema 以省上下文"},
+				Why: "红队常用的 MCP 工具集很大，压缩 schema 以省上下文"},
 		},
 	},
 	{

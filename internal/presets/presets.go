@@ -56,13 +56,13 @@ const (
 	ActSet     = "set"     // the section named by Match becomes Value
 	ActDrop    = "drop"    // the section named by Match goes
 	// context
-	ActAllow = "allow" // the file named by Match is kept, any other dropped
-	ActDeny  = "deny"  // the file named by Match goes
+	ActAllow          = "allow"   // the file named by Match is kept, any other dropped
+	ActDeny           = "deny"    // the file named by Match goes
 	ActCompactContext = "compact" // the file keeps its path and loses its text
 	// tools
-	ActRename  = "rename"  // the tool named by Match is shown as Value
+	ActRename       = "rename"  // the tool named by Match is shown as Value
 	ActCompactTools = "compact" // the tool's schema keeps names, loses descriptions
-	ActIsolate = "isolate" // the group named by Match is left out (dsh's isolate)
+	ActIsolate      = "isolate" // the group named by Match is left out (dsh's isolate)
 )
 
 // Patch is one edit of a preset.
@@ -139,9 +139,9 @@ type Stats struct {
 
 // Count is one kind's own tally.
 type Count struct {
-	Applied  int `json:"applied"`
-	Total    int `json:"total"`
-	Skipped  int `json:"skipped"`
+	Applied int `json:"applied"`
+	Total   int `json:"total"`
+	Skipped int `json:"skipped"`
 }
 
 // notesKeep bounds Stats.Notes.

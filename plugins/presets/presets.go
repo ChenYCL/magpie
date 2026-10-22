@@ -122,7 +122,7 @@ func init() {
 		One: "Presets are on", Many: "Presets are on",
 		Parts:  []pluginrt.Part{{Slot: "nav.page", Key: "presets"}},
 		Client: []string{"presets.css", "client.js"},
-		InUse: InUse,
+		InUse:  InUse,
 		Apply: func(c *pluginrt.Ctx) error {
 			c.OnDispose(gwmw.Use(Agent{}))
 			return nil

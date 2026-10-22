@@ -5,6 +5,9 @@
 const I18N = {
   zh: {
     "None": "无",
+    "Sandbox": "沙箱",
+    "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "给不可信的操作一个独立的箱子：命令在全新容器里执行，不落本机",
+    "The sandbox is on": "沙箱已开启",
     "Prompt": "提示词",
     "Request hook": "请求 Hook",
     "Gateway request hook": "网关请求 Hook",
@@ -3851,6 +3854,9 @@ const I18N = {
   },
   "zh-TW": {
     "None": "無",
+    "Sandbox": "沙箱",
+    "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "給不可信的操作一個獨立的箱子：命令在全新容器裡執行，不落本機",
+    "The sandbox is on": "沙箱已開啟",
     "Prompt": "提示詞",
     "Request hook": "請求 Hook",
     "Gateway request hook": "閘道請求 Hook",
@@ -7682,6 +7688,9 @@ const I18N = {
   },
   ja: {
     "None": "なし",
+    "Sandbox": "サンドボックス",
+    "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "信頼できない作業のための専用ボックス：コマンドは新しいコンテナで実行され、このマシンには触れない",
+    "The sandbox is on": "サンドボックスは有効",
     "Prompt": "プロンプト",
     "Request hook": "リクエストフック",
     "Gateway request hook": "ゲートウェイリクエストフック",
@@ -11515,6 +11524,9 @@ const I18N = {
   },
   de: {
     "None": "Keine",
+    "Sandbox": "Sandbox",
+    "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "Ein eigener Behälter für nicht vertrauenswürdige Arbeit: ein Befehl läuft in einem frischen Container, nicht auf diesem Rechner",
+    "The sandbox is on": "Die Sandbox ist an",
     "Prompt": "Prompt",
     "Request hook": "Anfrage-Hook",
     "Gateway request hook": "Gateway-Anfrage-Hook",

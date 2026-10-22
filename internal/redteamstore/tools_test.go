@@ -358,11 +358,14 @@ func TestMigrateAddsWebshellStatusToOldDatabase(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer d.Close()
-	list, err := d.Webshells("e1")
-	if err != nil {
+	// the raw row (the seeded engagement isn't a real one)
+	var status string
+	if err := d.do(func(conn *sql.DB) error {
+		return conn.QueryRow(`SELECT status FROM webshells WHERE id = 'w1'`).Scan(&status)
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 1 || list[0].Status != "" {
-		t.Fatalf("old row: %+v", list)
+	if status != "" {
+		t.Fatalf("old row gained a status: %q", status)
 	}
 }

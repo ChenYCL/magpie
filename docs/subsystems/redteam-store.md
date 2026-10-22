@@ -49,6 +49,19 @@ magpie's; this package is them, in magpie, served to every agent over MCP.
   found from the internet and reached from inside are two rows; a `/24` is
   neither and takes `scope: "segment"`.
 
+## Where this came from
+
+The tables and the tools follow [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)
+(MIT, © YuJunZhiXue) — the DeepSeek Harness red-team plugin whose client-plane
+store the skills under `deploy/magpie/config/redteam-skills/` were written
+against — and the mirror audit, 2026-10-22, of `mmparko/dsh-purge`
+(`upstream-snapshot-6c1d638`, verified byte-identical but for the mirror
+notice): no install hooks, one dependency, no eval/Function, no outbound
+fetch in the store (the only outbound calls are FOFA from a skill the agent
+runs, and GitHub tag checks in the UI). Its jailbreak prompt and its
+"detect an attack task and answer 不行" gate were deliberately **not**
+carried over; what was, is below. Attribution required by its license.
+
 ## Verification
 
 ```sh

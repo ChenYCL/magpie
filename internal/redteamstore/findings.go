@@ -590,18 +590,20 @@ type Webshell struct {
 	ShellType  string `json:"shellType,omitempty"`
 	PassKey    string `json:"passKey,omitempty"`
 	Privilege  string `json:"privilege,omitempty"`
+	Status     string `json:"status,omitempty"`
 	Verified   bool   `json:"verified,omitempty"`
 	CreatedAt  int64  `json:"createdAt"`
 	UpdatedAt  int64  `json:"updatedAt"`
 }
 
-// WebshellIn is what a tool passes to record a shell.
+// WebshellIn is what a tool passes to record or amend a shell.
 type WebshellIn struct {
 	Target    string
 	URL       string
 	ShellType string
 	PassKey   string
 	Privilege string
+	Status    string
 	Verified  *bool
 }
 
@@ -618,7 +620,8 @@ func (d *DB) AddWebshell(engagement string, in WebshellIn) (Webshell, error) {
 	err = d.do(func(conn *sql.DB) error {
 		now := Now()
 		sets, args := updates(map[string]string{
-			"target": in.Target, "shell_type": in.ShellType, "pass_key": in.PassKey, "privilege": in.Privilege,
+			"target": in.Target, "shell_type": in.ShellType, "pass_key": in.PassKey,
+			"privilege": in.Privilege, "status": in.Status,
 		}, now)
 		if in.Verified != nil {
 			sets = append(sets, "verified = ?")
@@ -633,10 +636,10 @@ func (d *DB) AddWebshell(engagement string, in WebshellIn) (Webshell, error) {
 			return nil
 		}
 		_, err = conn.Exec(`INSERT INTO webshells
-			(id, engagement, target, url, shell_type, pass_key, privilege, verified, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			(id, engagement, target, url, shell_type, pass_key, privilege, status, verified, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 			newID("wsh"), eng.ID, in.Target, in.URL, in.ShellType, in.PassKey, in.Privilege,
-			boolIntPtr(in.Verified), now, now)
+			in.Status, boolIntPtr(in.Verified), now, now)
 		return err
 	})
 	if err != nil {
@@ -651,10 +654,10 @@ func (d *DB) webshell(engagement, url string) (Webshell, error) {
 	var w Webshell
 	err := d.do(func(conn *sql.DB) error {
 		var verified int
-		if err := conn.QueryRow(`SELECT id, engagement, target, url, shell_type, pass_key, privilege, verified, created_at, updated_at
+		if err := conn.QueryRow(`SELECT id, engagement, target, url, shell_type, pass_key, privilege, status, verified, created_at, updated_at
 			FROM webshells WHERE engagement = ? AND url = ? ORDER BY created_at LIMIT 1`, engagement, url).
 			Scan(&w.ID, &w.Engagement, &w.Target, &w.URL, &w.ShellType, &w.PassKey, &w.Privilege,
-				&verified, &w.CreatedAt, &w.UpdatedAt); err != nil {
+				&w.Status, &verified, &w.CreatedAt, &w.UpdatedAt); err != nil {
 			return err
 		}
 		w.Verified = verified != 0
@@ -671,7 +674,7 @@ func (d *DB) Webshells(engagement string) ([]Webshell, error) {
 	}
 	var out []Webshell
 	err = d.do(func(conn *sql.DB) error {
-		rows, err := conn.Query(`SELECT id, engagement, target, url, shell_type, pass_key, privilege, verified, created_at, updated_at
+		rows, err := conn.Query(`SELECT id, engagement, target, url, shell_type, pass_key, privilege, status, verified, created_at, updated_at
 			FROM webshells WHERE engagement = ? ORDER BY created_at`, eng.ID)
 		if err != nil {
 			return err
@@ -681,7 +684,7 @@ func (d *DB) Webshells(engagement string) ([]Webshell, error) {
 			var w Webshell
 			var verified int
 			if err := rows.Scan(&w.ID, &w.Engagement, &w.Target, &w.URL, &w.ShellType, &w.PassKey,
-				&w.Privilege, &verified, &w.CreatedAt, &w.UpdatedAt); err != nil {
+				&w.Privilege, &w.Status, &verified, &w.CreatedAt, &w.UpdatedAt); err != nil {
 				return err
 			}
 			w.Verified = verified != 0
@@ -1271,4 +1274,78 @@ func (d *DB) Report(engagement string) (Report, error) {
 		return Report{}, err
 	}
 	return r, nil
+}
+
+// Pocs reads every technique, newest first, across engagements.
+func (d *DB) Pocs() ([]Poc, error) {
+	var out []Poc
+	err := d.do(func(conn *sql.DB) error {
+		rows, err := conn.Query(`SELECT id, name, category, engagement, asset_target, severity, content, verified_note, verified, created_at, updated_at
+			FROM pocs ORDER BY created_at DESC`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var p Poc
+			var verified int
+			if err := rows.Scan(&p.ID, &p.Name, &p.Category, &p.Engagement, &p.AssetTarget, &p.Severity,
+				&p.Content, &p.VerifiedNote, &verified, &p.CreatedAt, &p.UpdatedAt); err != nil {
+				return err
+			}
+			p.Verified = verified != 0
+			out = append(out, p)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// ChainList reads an engagement's actions, oldest last, the last n of them
+// (0 or less is 50).
+func (d *DB) ChainList(engagement string, n int) ([]Chain, error) {
+	if n <= 0 {
+		n = 50
+	}
+	list, err := d.Chains(engagement)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) > n {
+		list = list[len(list)-n:]
+	}
+	return list, nil
+}
+
+// ScoreList groups an engagement's scores by category, with the total and
+// the distinct targets in each — the read side of scoring.
+func (d *DB) ScoreList(engagement string) (map[string]any, error) {
+	scores, err := d.Scores(engagement)
+	if err != nil {
+		return nil, err
+	}
+	type catRow struct {
+		Category string   `json:"category"`
+		Points   int      `json:"points"`
+		Targets  []string `json:"targets"`
+	}
+	order := []string{}
+	byCat := map[string]*catRow{}
+	total := 0
+	for _, sc := range scores {
+		row := byCat[sc.Category]
+		if row == nil {
+			row = &catRow{Category: sc.Category}
+			byCat[sc.Category] = row
+			order = append(order, sc.Category)
+		}
+		row.Points += sc.Points
+		row.Targets = append(row.Targets, sc.Target)
+		total += sc.Points
+	}
+	cats := []catRow{}
+	for _, c := range order {
+		cats = append(cats, *byCat[c])
+	}
+	return map[string]any{"total": total, "rows": len(scores), "categories": cats}, nil
 }

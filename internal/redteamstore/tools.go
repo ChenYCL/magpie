@@ -328,11 +328,28 @@ func Tools() []Tool {
 				"shell_type": {"type": "string", "description": "behinder | godzilla | antsword | custom"},
 				"pass_key":   {"type": "string"},
 				"privilege":  {"type": "string"},
+				"status":     {"type": "string", "enum": []string{"online", "offline", "dead"}, "description": "the last re-check; empty is never re-checked"},
 				"verified":   {"type": "boolean"},
 			}, "url"), Mutates: true, Run: func(d *DB, a map[string]any) (string, error) {
 				w, err := d.AddWebshell(str(a, "engagement"), WebshellIn{
 					Target: str(a, "target"), URL: str(a, "url"), ShellType: str(a, "shell_type"),
-					PassKey: str(a, "pass_key"), Privilege: str(a, "privilege"), Verified: boolArg(a, "verified"),
+					PassKey: str(a, "pass_key"), Privilege: str(a, "privilege"), Status: str(a, "status"),
+					Verified: boolArg(a, "verified"),
+				})
+				return jsonOf(w), err
+			}},
+
+		{Name: "redteam_webshell_update", Title: "更新 WebShell",
+			Desc: "Amend a shell by its URL: the last re-check's outcome (online / offline / dead), what it runs as, whether the operator has really connected. A dead shell is left as it is — the next role reads this before trusting one.",
+			Schema: obj(objProps{
+				"url":       {"type": "string", "description": "the shell's URL (the record's key)"},
+				"status":    {"type": "string", "enum": []string{"online", "offline", "dead"}},
+				"privilege": {"type": "string"},
+				"verified":  {"type": "boolean", "description": "the operator connected to it for real"},
+			}, "url"), Mutates: true, Run: func(d *DB, a map[string]any) (string, error) {
+				w, err := d.AddWebshell(str(a, "engagement"), WebshellIn{
+					URL: str(a, "url"), Privilege: str(a, "privilege"), Status: str(a, "status"),
+					Verified: boolArg(a, "verified"),
 				})
 				return jsonOf(w), err
 			}},
@@ -441,6 +458,116 @@ func Tools() []Tool {
 					return "", err
 				}
 				return jsonOf(r), nil
+			}},
+
+		{Name: "redteam_asset_get", Title: "取资产",
+			Desc: "One asset by its id, or by its host / host:port — with everything a rescan appended (test, surface, tags, names).",
+			Schema: obj(objProps{
+				"id":    {"type": "string"},
+				"query": {"type": "string", "description": "host or host:port, when no id is given"},
+			}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.AssetGet(str(a, "engagement"), str(a, "id"), str(a, "query"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_asset_stats", Title: "资产统计",
+			Desc:   "The engagement's assets counted: total, per scope, per status, per priority, and the /24s with hosts in them. The collection phase's closing check.",
+			Schema: obj(objProps{}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.AssetStats(str(a, "engagement"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_asset_timeline", Title: "资产时间线",
+			Desc: "Assets by the day they were found (internal and internet apart), and the latest ones. Answers 'when did we find this' and shows a gap in collection.",
+			Schema: obj(objProps{
+				"limit": {"type": "number", "description": "how many of the latest to list (default 50)"},
+			}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.AssetTimeline(str(a, "engagement"), intArg(a, "limit"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_asset_graph", Title: "资产图谱",
+			Desc:   "The engagement as a graph: segments, the assets in each, and every edge (contains, resolves-to, and what redteam_asset_link added). For planning lateral movement.",
+			Schema: obj(objProps{}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.AssetGraph(str(a, "engagement"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_chain", Title: "动作清单",
+			Desc: "The engagement's recorded actions (stage, role, tool, result), oldest last. Read this to see what was already tried before dispatching a role.",
+			Schema: obj(objProps{
+				"limit": {"type": "number", "description": "the last N actions (default 50)"},
+			}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.ChainList(str(a, "engagement"), intArg(a, "limit"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_tunnel_list", Title: "隧道清单",
+			Desc:   "Every tunnel: kind, which end is on the target, the listen address, and the networks it reaches. Only an up one with reachable filled is a path inside.",
+			Schema: obj(objProps{}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.Tunnels(str(a, "engagement"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_webshell_list", Title: "WebShell 清单",
+			Desc:   "Every shell recorded: its URL, type, pass key and whether the operator has actually connected. Only a verified one is an entry.",
+			Schema: obj(objProps{}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.Webshells(str(a, "engagement"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_vuln_query", Title: "查漏洞",
+			Desc: "The engagement's vulnerabilities, or the ones on one target. Check here before testing a host again.",
+			Schema: obj(objProps{
+				"target": {"type": "string", "description": "only this host:port's, when given"},
+			}), Run: func(d *DB, a map[string]any) (string, error) {
+				list, err := d.Vulns(str(a, "engagement"))
+				if err != nil {
+					return "", err
+				}
+				if t := str(a, "target"); t != "" {
+					kept := list[:0]
+					for _, v := range list {
+						if v.Target == t {
+							kept = append(kept, v)
+						}
+					}
+					list = kept
+				}
+				return jsonOf(list), nil
+			}},
+
+		{Name: "redteam_poc_list", Title: "POC 清单",
+			Desc:   "Every technique kept across all engagements, newest first. Skim this before writing an exploit.",
+			Schema: obj(objProps{}), Run: func(d *DB, a map[string]any) (string, error) {
+				list, err := d.Pocs()
+				return jsonOf(list), err
+			}},
+
+		{Name: "redteam_attack_file_list", Title: "载荷清单",
+			Desc:   "Every file built or delivered in this engagement: name, where it is, what it was for, where it went.",
+			Schema: obj(objProps{}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.AttackFiles(str(a, "engagement"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_score_list", Title: "得分面板",
+			Desc:   "The engagement's scored targets grouped by category, with the total. Read this before planning the next move: the categories with nothing yet are where the remaining points are.",
+			Schema: obj(objProps{}), Run: func(d *DB, a map[string]any) (string, error) {
+				r, err := d.ScoreList(str(a, "engagement"))
+				return jsonOf(r), err
+			}},
+
+		{Name: "redteam_engagement_open", Title: "打开演练",
+			Desc: "Return the engagement for a target without making one: what is already recorded there. redteam_engagement_begin is the one that creates.",
+			Schema: obj(objProps{
+				"target": {"type": "string", "description": "the unit's name"},
+			}, "target"), Run: func(d *DB, a map[string]any) (string, error) {
+				eng, err := d.Open(str(a, "target"))
+				if err != nil {
+					return "", err
+				}
+				return jsonOf(eng), nil
 			}},
 
 		{Name: "redteam_engagements", Title: "演练列表",

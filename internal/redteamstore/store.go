@@ -243,6 +243,7 @@ CREATE TABLE IF NOT EXISTS webshells (
 	shell_type TEXT NOT NULL DEFAULT '', -- behinder | godzilla | antsword | custom
 	pass_key   TEXT NOT NULL DEFAULT '',
 	privilege  TEXT NOT NULL DEFAULT '',
+	status     TEXT NOT NULL DEFAULT '',  -- online | offline | dead ("" = never re-checked)
 	verified   INTEGER NOT NULL DEFAULT 0,
 	created_at INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL
@@ -328,7 +329,35 @@ func migrate(conn *sql.DB) error {
 	if _, err := conn.Exec(schema); err != nil {
 		return fmt.Errorf("redteam store schema: %w", err)
 	}
+	// a database made before webshells.status existed keeps its rows: the
+	// column is added, left "" (never re-checked)
+	if err := ensureColumn(conn, "webshells", "status", `ALTER TABLE webshells ADD COLUMN status TEXT NOT NULL DEFAULT ""`); err != nil {
+		return fmt.Errorf("redteam store migrate: %w", err)
+	}
 	return nil
+}
+
+// ensureColumn adds a column a table made by an older schema lacks.
+func ensureColumn(conn *sql.DB, table, column, ddl string) error {
+	rows, err := conn.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = conn.Exec(ddl)
+	return err
 }
 
 // ---------------------------------------------------------------------

@@ -4,7 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Engagement is one authorized target, as an operator named it.
@@ -107,6 +110,34 @@ func (d *DB) Target(idOrTarget string) (Engagement, error) {
 	// a name no engagement has is a new one: the commander names the target
 	// on its first tool call as often as it begins the engagement first
 	return d.Begin(name, "", "")
+}
+
+// Open reads the engagement an id or a target names, and makes nothing:
+// redteam_engagement_begin is the one that creates. An unknown name is an
+// error that says so.
+func (d *DB) Open(idOrTarget string) (Engagement, error) {
+	name := strings.TrimSpace(idOrTarget)
+	if name == "" {
+		return d.Target("")
+	}
+	var found Engagement
+	err := d.do(func(conn *sql.DB) error {
+		row := conn.QueryRow(`SELECT id, target, scope, notes, created_at, updated_at FROM engagements WHERE id = ?`, name)
+		err := row.Scan(&found.ID, &found.Target, &found.Scope, &found.Notes, &found.CreatedAt, &found.UpdatedAt)
+		if err == nil || !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		row = conn.QueryRow(`SELECT id, target, scope, notes, created_at, updated_at FROM engagements WHERE target = ?`, name)
+		err = row.Scan(&found.ID, &found.Target, &found.Scope, &found.Notes, &found.CreatedAt, &found.UpdatedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("no engagement names " + name + "; begin one with redteam_engagement_begin")
+		}
+		return err
+	})
+	if err != nil {
+		return Engagement{}, err
+	}
+	return found, nil
 }
 
 // ---------------------------------------------------------------------
@@ -408,11 +439,17 @@ func (d *DB) LinkAssets(engagement, from, to, rel string) error {
 
 // findAsset is the id of the asset a target names, made if it isn't there.
 func (d *DB) findAsset(engagement, target string) (string, error) {
-	host, port := hostPort(target)
 	list, err := d.Assets(engagement)
 	if err != nil {
 		return "", err
 	}
+	// an asset's own id names it directly
+	for _, a := range list {
+		if a.ID == target {
+			return a.ID, nil
+		}
+	}
+	host, port := hostPort(target)
 	for _, a := range list {
 		if a.IP == host && a.Port == port {
 			return a.ID, nil
@@ -483,4 +520,236 @@ func boolIntPtr(b *bool) int {
 		return 1
 	}
 	return 0
+}
+
+// AssetGet reads one asset: by its id, or by what a host or host:port
+// query finds. The empty answer is an error that says what to search by,
+// not an empty object.
+func (d *DB) AssetGet(engagement, id, query string) (Asset, error) {
+	var zero Asset
+	if id != "" {
+		list, err := d.Assets(engagement)
+		if err != nil {
+			return zero, err
+		}
+		for _, a := range list {
+			if a.ID == id {
+				return a, nil
+			}
+		}
+		return zero, errors.New("no asset with id " + id + " in this engagement")
+	}
+	if query == "" {
+		return zero, errors.New("an asset needs an id, or a host / host:port to find it by")
+	}
+	list, err := d.AssetQuery(engagement, query)
+	if err != nil {
+		return zero, err
+	}
+	if len(list) == 0 {
+		return zero, errors.New("no asset matches " + query + "; record it with redteam_asset_add first")
+	}
+	if len(list) > 1 {
+		// several ports of one host: the widest row (the host without a
+		// port) is what "取资产" means here
+		for _, a := range list {
+			if a.Port == 0 && a.Scope != "segment" {
+				return a, nil
+			}
+		}
+	}
+	return list[0], nil
+}
+
+// AssetStats counts the engagement's assets: total, per scope, per status
+// and per priority, and the segments with hosts in them. The collection
+// phase's closing check.
+func (d *DB) AssetStats(engagement string) (map[string]any, error) {
+	list, err := d.Assets(engagement)
+	if err != nil {
+		return nil, err
+	}
+	stats := map[string]any{
+		"total": 0, "internet": 0, "internal": 0, "segments": 0,
+		"status": map[string]int{}, "priority": map[string]int{},
+		"services": map[string]int{}, "owned": 0,
+	}
+	segments := map[string]int{}
+	for _, a := range list {
+		if a.Scope == "segment" {
+			stats["segments"] = stats["segments"].(int) + 1
+			segments[a.IP] = 0
+			continue
+		}
+		stats["total"] = stats["total"].(int) + 1
+		switch a.Scope {
+		case "internet":
+			stats["internet"] = stats["internet"].(int) + 1
+		case "internal":
+			stats["internal"] = stats["internal"].(int) + 1
+		}
+		if a.Status == "owned" {
+			stats["owned"] = stats["owned"].(int) + 1
+		}
+		st := stats["status"].(map[string]int)
+		if a.Status == "" {
+			a.Status = "new"
+		}
+		st[a.Status]++
+		pr := stats["priority"].(map[string]int)
+		if a.Priority != "" {
+			pr[a.Priority]++
+		}
+		if a.Service != "" {
+			sv := stats["services"].(map[string]int)
+			sv[a.Service]++
+		}
+	}
+	// count the hosts in each segment
+	for _, a := range list {
+		if a.Scope == "segment" {
+			continue
+		}
+		if seg := segment(a.IP); seg != "" {
+			if _, ok := segments[seg]; ok {
+				segments[seg]++
+			}
+		}
+	}
+	type segRow struct {
+		CIDR  string `json:"cidr"`
+		Hosts int    `json:"hosts"`
+	}
+	segList := []segRow{}
+	for cidr, n := range segments {
+		segList = append(segList, segRow{cidr, n})
+	}
+	sort.Slice(segList, func(i, j int) bool { return segList[i].CIDR < segList[j].CIDR })
+	stats["segmentList"] = segList
+	return stats, nil
+}
+
+// AssetTimeline groups the engagement's assets by the day they were found
+// (internal and internet apart) and lists the latest ones.
+func (d *DB) AssetTimeline(engagement string, limit int) (map[string]any, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	list, err := d.Assets(engagement)
+	if err != nil {
+		return nil, err
+	}
+	type dayRow struct {
+		Day      string `json:"day"`
+		Internet int    `json:"internet"`
+		Internal int    `json:"internal"`
+	}
+	byDay := map[string]*dayRow{}
+	type recent struct {
+		ID      string `json:"id"`
+		Target  string `json:"target"`
+		Scope   string `json:"scope,omitempty"`
+		FoundAt int64  `json:"foundAt"`
+	}
+	latest := []recent{}
+	for _, a := range list {
+		if a.Scope == "segment" {
+			continue
+		}
+		day := time.Unix(a.CreatedAt/1000, 0).UTC().Format("2006-01-02")
+		row := byDay[day]
+		if row == nil {
+			row = &dayRow{Day: day}
+			byDay[day] = row
+		}
+		if a.Scope == "internal" {
+			row.Internal++
+		} else {
+			row.Internet++
+		}
+		latest = append(latest, recent{a.ID, a.IP + hostSuffix(a.Port), a.Scope, a.CreatedAt})
+	}
+	days := []dayRow{}
+	for _, row := range byDay {
+		days = append(days, *row)
+	}
+	sort.Slice(days, func(i, j int) bool { return days[i].Day < days[j].Day })
+	sort.Slice(latest, func(i, j int) bool { return latest[i].FoundAt > latest[j].FoundAt })
+	if len(latest) > limit {
+		latest = latest[:limit]
+	}
+	return map[string]any{"days": days, "latest": latest}, nil
+}
+
+// AssetGraph is the engagement as nodes and edges: every segment, every
+// asset in it, and every edge between them. A graph is what the lateral
+// movement plan reads.
+func (d *DB) AssetGraph(engagement string) (map[string]any, error) {
+	list, err := d.Assets(engagement)
+	if err != nil {
+		return nil, err
+	}
+	type node struct {
+		ID     string `json:"id"`
+		Kind   string `json:"kind"`
+		Target string `json:"target,omitempty"`
+		Scope  string `json:"scope,omitempty"`
+		Status string `json:"status,omitempty"`
+	}
+	nodes := []node{}
+	byID := map[string]bool{}
+	for _, a := range list {
+		kind := "host"
+		if a.Scope == "segment" {
+			kind = "segment"
+		}
+		nodes = append(nodes, node{a.ID, kind, a.IP + hostSuffix(a.Port), a.Scope, a.Status})
+		byID[a.ID] = true
+	}
+	type edge struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+		Rel  string `json:"rel"`
+	}
+	eng, err := d.Target(engagement)
+	if err != nil {
+		return nil, err
+	}
+	edges := []edge{}
+	err = d.do(func(conn *sql.DB) error {
+		rows, err := conn.Query(`SELECT from_asset, to_asset, rel FROM asset_edges WHERE engagement = ?`, eng.ID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var e edge
+			if err := rows.Scan(&e.From, &e.To, &e.Rel); err != nil {
+				return err
+			}
+			edges = append(edges, e)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	// an edge naming an asset outside the list (an amend dropped it) is
+	// left out: a graph that names absent nodes isn't drawable
+	kept := edges[:0]
+	for _, e := range edges {
+		if byID[e.From] && byID[e.To] {
+			kept = append(kept, e)
+		}
+	}
+	return map[string]any{"nodes": nodes, "edges": kept}, nil
+}
+
+// hostSuffix is a port as ":443", or "" without one — the read side of a
+// target string.
+func hostSuffix(port int) string {
+	if port <= 0 {
+		return ""
+	}
+	return ":" + strconv.Itoa(port)
 }

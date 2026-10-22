@@ -133,7 +133,7 @@ func TestBootSaysBuiltinsOff(t *testing.T) {
 	if err := pluginrt.Set("library", true); err != nil {
 		t.Fatal(err)
 	}
-	if b := boot(); !strings.Contains(b, `"featuresOff":["groups","otel","sessions","warmups"]`) {
+	if b := boot(); !strings.Contains(b, `"featuresOff":["groups","gwplugins","otel","sessions","warmups"]`) {
 		t.Fatalf("Essentials picked: %s", b)
 	}
 }

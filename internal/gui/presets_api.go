@@ -8,8 +8,8 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/presets"
-	"github.com/yetone/magpie/internal/proxypool"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/proxypool"
 )
 
 // presetsRoutes are the Agent presets page's API: the presets magpie ships

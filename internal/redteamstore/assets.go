@@ -50,7 +50,7 @@ func (d *DB) Begin(target, scope, notes string) (Engagement, error) {
 
 // Engagements lists every engagement, newest first.
 func (d *DB) Engagements() ([]Engagement, error) {
-	var out []Engagement
+	out := []Engagement{}
 	err := d.do(func(conn *sql.DB) error {
 		rows, err := conn.Query(`SELECT id, target, scope, notes, created_at, updated_at FROM engagements ORDER BY created_at DESC`)
 		if err != nil {

@@ -369,3 +369,27 @@ func TestMigrateAddsWebshellStatusToOldDatabase(t *testing.T) {
 		t.Fatalf("old row gained a status: %q", status)
 	}
 }
+
+func TestEngagementsEmptyIsAListNotNull(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "redteam.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	// a store with no engagement answers a list, not null: the page
+	// renders "null" for a nil slice
+	list, err := d.Engagements()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list == nil {
+		t.Fatal("nil slice; want an empty list")
+	}
+	raw, err := json.Marshal(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "[]" {
+		t.Fatalf("%s", raw)
+	}
+}

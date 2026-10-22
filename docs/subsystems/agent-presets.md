@@ -124,3 +124,20 @@ Not absorbed, and why:
 The 18 redteam operational skills (recon-pipeline, nuclei-scan,
 gogo/fscan-intranet, suo5/frp tunnels, webshell-toolkit, …) are in the
 library from WoYun520/dsh-purge, given to claude and omp.
+
+## The red team's record
+
+The `redteam` preset's commander is told to check a subagent's report
+against what was written down, and the skills it dispatches call
+`redteam_asset_add`, `redteam_vuln_add`, `redteam_credential_add` and
+twenty more. Those tools are magpie's now: `internal/redteamstore`, served
+to every agent at `/mcp/magpie/redteam`. The preset tells the commander to
+begin an engagement before anything else, to write each finding with its
+evidence, and to read `redteam_report` before saying a step is done. See
+[Red team store](redteam-store.md).
+
+The preset's `isolate` names compaction, plan mode, terminals and the
+tool-result pruner; magpie reports them to the window and hands them to an
+agent's own settings where magpie writes any, and the gateway itself
+executes none of them. A part that is not the gateway's (compaction is the
+agent's own) is the agent's to honour.

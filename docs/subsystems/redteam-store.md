@@ -108,5 +108,42 @@ The smoke engagement was dropped and `redteam.db` removed afterwards, so
 the deployment starts with no engagement (the page says so, rather than
 showing an empty table).
 
-Not run: the whole suite, and a full five-phase engagement against a real
-authorized target.
+Not run: a full five-phase engagement against a real authorized target.
+
+## The second pass: the read side (86b372da, d2de4f58)
+
+The first pass covered writing; the commander's loop also reads, and the
+preset's dispatch steps ("先查库避免重复打") had no tool to read with.
+Twelve tools answer that, each the same rows in the shape the loop needs:
+`asset_get`, `asset_stats`, `asset_timeline`, `asset_graph`, `chain`,
+`tunnel_list`, `webshell_list`, `vuln_query`, `poc_list`,
+`score_list`, `attack_file_list`, `engagement_open`, and
+`webshell_update` for the re-check.
+
+Two facts the pass turned up:
+
+- `redteam_engagement_open` reads. `Target` (every other tool's
+  resolution) makes an engagement for an unknown name — right for a
+  write, wrong for a read: a mistyped unit would have opened an empty
+  engagement as a side effect of asking. `Open` answers
+  "no engagement names X" instead.
+- `LinkAssets`' finder treated an asset **id** as a target string, made
+  an asset whose ip was the id, and linked to that ghost. It matches ids
+  first now. Found by the graph test, which asserted the node count.
+
+A shell's re-check had no field for its outcome: `webshells.status`
+(online | offline | dead, "" = never re-checked), written by
+`webshell_add` and `webshell_update`; an older database gains the column
+on open, its rows kept (a migration test covers it).
+
+27 tools → 40. What was run: the store's 25 tests, the whole `gateway`
+and `presets` suites (on a golang image with python3 — `alpine` has
+none, and `TestClaudeBridgeSafeguardContextUpdates` stands up Claude
+Code with a Python script, so it fails there with exit 127 and nothing
+else), then live: `tools/list` answered 40; begin → asset (with
+priority/potential/reason) → stats → timeline → graph (the /24 and its
+`contains` edge) → score_hit → score_list (one category, 20 points) →
+webshell_add → webshell_update (same row, status online, verified) →
+`/api/redteam/report` (assets 2, scores 20, webshells 1) →
+`engagement_open` on an unknown name answered the error, and made
+nothing.

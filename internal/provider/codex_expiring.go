@@ -258,6 +258,7 @@ func KeepResetsFromRunningOut(ctx context.Context) {
 		}
 		c, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		SpendExpiringCodexResets(c)
+		SpendExpiringZhipuResets(c)
 		cancel()
 		t.Reset(resetExpiryClose)
 	}

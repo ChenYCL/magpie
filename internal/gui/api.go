@@ -1259,6 +1259,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// which Codex accounts spend a reset by themselves, set on the Usage card
 		in.CodexAutoReset = cur.CodexAutoReset
 		in.CodexAutoResetOnly = cur.CodexAutoResetOnly // and at which of the two times
+		in.ZhipuAutoReset = cur.ZhipuAutoReset         // and which GLM plans spend a reset card by themselves
 		// and which of them spend their credits, set there too
 		in.CodexNoCredits = cur.CodexNoCredits
 		// and each Codex account's own daily warm-up (codex-warm-at below)
@@ -1688,6 +1689,24 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			set = func() error { return provider.SetCodexAutoResetCase(in.User, in.When, in.On) }
 		}
 		if err := set(); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// whether a GLM Coding Plan key spends a weekly reset card by itself,
+	// the Usage card's toggle: its week used up and nobody else left, or
+	// the soonest card within a day of running out, one a week at most
+	mux.HandleFunc("POST /api/settings/zhipu-auto-reset", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			ID string
+			On bool
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetZhipuAutoReset(in.ID, in.On); err != nil {
 			fail(rw, err)
 			return
 		}

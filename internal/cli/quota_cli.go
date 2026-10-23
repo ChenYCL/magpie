@@ -16,7 +16,7 @@ import (
 
 const quotaUsage = `usage: magpie quota [<provider>…] [--json]
        magpie quota reset [<codex account>] [--yes]
-       magpie quota auto-reset [<codex account>] [week|expiring] [on|off]
+       magpie quota glm-reset [<glm provider>] [on|off]
        magpie quota credits [<codex account>] [on|off]
        magpie quota alert [<percent>|off] [--balance <amount>|off]
        magpie quota wait <provider|account> [--timeout <duration>] [--quiet]
@@ -82,6 +82,9 @@ func quotaCmd(args []string) error {
 	}
 	if len(args) > 1 && args[1] == "auto-reset" {
 		return quotaAutoResetCmd(args[2:])
+	}
+	if len(args) > 1 && args[1] == "glm-reset" {
+		return quotaGLMResetCmd(args[2:])
 	}
 	if len(args) > 1 && args[1] == "credits" {
 		return quotaCreditsCmd(args[2:])
@@ -361,8 +364,55 @@ func resetUsedWhy(why string) string {
 		return "used by itself: its week was used up and no other account could answer"
 	case provider.ResetUsedExpiring:
 		return "used by itself: it was about to run out unused"
+	case provider.ResetUsedZhipuWeek:
+		return "used by itself: the GLM plan's week was used up and nobody else could answer"
+	case provider.ResetUsedZhipuExpiring:
+		return "used by itself: a GLM reset card was about to run out unused"
 	}
 	return "used by hand"
+}
+
+// quotaGLMResetCmd: magpie quota glm-reset [<glm provider>] [on|off] —
+// whether a GLM Coding Plan key spends a weekly reset card by itself.
+func quotaGLMResetCmd(args []string) error {
+	id, set, on := "", false, false
+	for _, a := range args {
+		switch strings.ToLower(a) {
+		case "on", "off":
+			set, on = true, strings.EqualFold(a, "on")
+		case "help", "-h", "--help":
+			fmt.Println(quotaUsage)
+			return nil
+		default:
+			if id != "" {
+				return fmt.Errorf("one plan at a time: %s or %s", id, a)
+			}
+			id = a
+		}
+	}
+	if !set && id == "" {
+		on := settings.Load().ZhipuAutoReset
+		if len(on) == 0 {
+			fmt.Println(muted.Render("no GLM Coding Plan spends a reset card by itself ·"), "magpie quota glm-reset <provider> on")
+			return nil
+		}
+		for _, u := range on {
+			fmt.Println(green.Render("●"), u)
+		}
+		return nil
+	}
+	if id == "" {
+		return fmt.Errorf("name the plan: magpie quota glm-reset <provider> on")
+	}
+	if err := provider.SetZhipuAutoReset(id, on); err != nil {
+		return err
+	}
+	if on {
+		fmt.Println(green.Render("✓"), id+":", "spends a weekly reset card by itself when its week is used up and nobody else can answer, one a week at most, and when the soonest card is within a day of running out")
+	} else {
+		fmt.Println(green.Render("✓"), id+":", "no longer spends a reset card by itself")
+	}
+	return nil
 }
 
 // quotaCreditsCmd: magpie quota credits [<codex account>] [on|off] —

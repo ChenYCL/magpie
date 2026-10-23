@@ -188,6 +188,13 @@ type Settings struct {
 	// about to run out only. An account not in it uses one at both, as
 	// every account did before the two were split.
 	CodexAutoResetOnly map[string]string `json:"codexAutoResetOnly,omitempty"`
+	// ZhipuAutoReset are the GLM Coding Plan keys (lower-case provider id,
+	// or "id@key name" when a provider holds several keys) that spend one
+	// of their weekly reset cards by themselves: when the week's window is
+	// used up and nobody else can answer, or the soonest card is within a
+	// day of running out — one a week at most, so a heavy week doesn't eat
+	// the pile (provider.AutoUseZhipuReset). Off unless turned on.
+	ZhipuAutoReset []string `json:"zhipuAutoReset,omitempty"`
 	// CodexNoCredits are the ChatGPT accounts (lower-case) that don't
 	// spend their credits: once a usage window is used up, routing holds
 	// the account as used up and goes on to the user's other accounts,
@@ -1370,6 +1377,10 @@ func save(s Settings, recording bool) error {
 	if len(only) > 0 {
 		s.CodexAutoResetOnly = only
 	}
+	for i, u := range s.ZhipuAutoReset {
+		s.ZhipuAutoReset[i] = strings.ToLower(u)
+	}
+	s.ZhipuAutoReset = ids(s.ZhipuAutoReset)
 	for i, u := range s.CodexNoCredits {
 		s.CodexNoCredits[i] = strings.ToLower(u)
 	}

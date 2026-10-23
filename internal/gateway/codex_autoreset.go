@@ -40,11 +40,19 @@ func (s *Server) autoReset(ctx context.Context, cands []candidate, c candidate, 
 	seen := map[string]bool{}
 	for _, x := range append(append([]candidate{c}, cands...), held...) {
 		a := x.p.Account
-		if a == nil || a.User == "" || seen[x.restKey()] || !provider.AutoResetsWeek(a.Agent, a.User) {
+		glm := a == nil && provider.ZhipuAutoReset(x.p.ID)
+		if (!glm && (a == nil || a.User == "" || !provider.AutoResetsWeek(a.Agent, a.User))) || seen[x.restKey()] {
 			continue
 		}
 		seen[x.restKey()] = true
-		if out, ok := autoResetOf(ctx, a.Agent, a.User); ok {
+		var out provider.ResetOutcome
+		var ok bool
+		if glm {
+			out, ok = autoResetZhipu(ctx, x.p.ID)
+		} else {
+			out, ok = autoResetOf(ctx, a.Agent, a.User)
+		}
+		if ok {
 			s.Unrest(x.restKey())
 			x.capped = nil // its windows started again: held no more
 			return x, out, true
@@ -65,6 +73,23 @@ func (s *Server) autoResetSignedIn(ctx context.Context) (string, provider.ResetO
 		s.Unrest("codex@" + strings.ToLower(who))
 	}
 	return who, out, ok
+}
+
+// autoResetZhipu spends one weekly reset card of a GLM Coding Plan key if
+// its rules let it, and says whether the window started again.
+func autoResetZhipu(ctx context.Context, id string) (provider.ResetOutcome, bool) {
+	ctx, cancel := context.WithTimeout(ctx, autoResetTimeout)
+	defer cancel()
+	out, err := provider.AutoUseZhipuReset(ctx, id)
+	switch {
+	case err != nil:
+		log.Printf("glm reset for %s not used: %v", id, err)
+	case out.Code == "reset":
+		log.Printf("glm reset used for %s, its week used up: %s", id, out.Text())
+	case out.Code != "":
+		log.Printf("glm reset for %s not used: %s", id, out.Text())
+	}
+	return out, err == nil && out.Code == "reset"
 }
 
 // autoResetOf spends one of agent's account user's resets if its rules

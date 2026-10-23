@@ -303,6 +303,20 @@ could match the same key.**
   it once with TZ=UTC and once in a far zone.
 - Seen 1× (2026-10-15).
 
+**A probe of an unknown API never sends a value that might be the real
+one.**
+- Discovering Z.ai's reset-card endpoint (2026-10-23), the parameter name
+  `resetType` was known but its values weren't. Probing with `WEEK` — a
+  guess at the real value — spent one of the account's three weekly reset
+  cards (`POST /api/biz/customer-package-reset/use` returns 200 and spends
+  it; the list then showed 2 of 2, `lastWeekResetTime` just updated). The
+  nonsense values (`DAY`, `HOUR`) were refused harmlessly; `FIVE_HOUR`
+  answered "no attempts available" and spent nothing.
+- Probe only with values that cannot succeed (empty, wrong case,
+  impossible). Confirm the real value from a refusal message or a captured
+  request, and spend a real card only as the deliberate last check.
+- Seen 1× (2026-10-23).
+
 **Work added to a path every request or poll takes is costed at that
 rate and at its largest input.**
 - 644f4316f's Codex model/effort consumption was read again on every 15s

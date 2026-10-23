@@ -17231,6 +17231,7 @@ function resetsWords(r, q) {
     w.append(el("span", "resets-n", "↺ " + parts.join(" · ")));
     // a GLM Coding plan's resets, a team's or the person's own (#1191)
     w.title = r.team ? t("The team plan's resets, used on bigmodel.cn or z.ai") : t("The plan's resets, used on bigmodel.cn or z.ai");
+    if (q && !r.team) w.append(glmAutoResetButton(q));
     if (r.until) {
       const at = new Date(r.until);
       w.append(el("span", "resets-until", " · " + t("until {when}", { when: resetClock(at) })));
@@ -17415,6 +17416,39 @@ function autoResetButton(q, c) {
       status(autoResetStatus(q.user, autoResetWhen(q)), "ok");
       renderQuotas();
       if ($("#codexAutoResetRow")) renderAutoResetOwn(prefs); // Settings › Usage says the same
+    } catch (err) {
+      b.disabled = false;
+      status(err.message, "err");
+    }
+  };
+  return b;
+}
+
+// glmAutoResetButton is the switch on a GLM Coding Plan's card: on, one
+// weekly reset card is spent by itself when the week is used up and nobody
+// else can answer, or the soonest card is within a day of running out —
+// one a week at most. Off until turned on.
+function glmAutoResetButton(q) {
+  const id = (q.provider + (q.user ? "@" + q.user : "")).toLowerCase();
+  const on = (state.settings?.zhipuAutoReset || []).includes(id);
+  const b = el("button", "lib-switch auto-reset" + (on ? " on" : ""));
+  b.type = "button";
+  b.setAttribute("role", "switch");
+  b.setAttribute("aria-checked", String(on));
+  b.setAttribute("aria-label", t("Auto-use reset cards"));
+  b.title = t(on
+    ? "On: one weekly reset card is used by itself when this plan's week is used up and nobody else can answer, one a week at most, and when the soonest card is within a day of running out. Click to turn it off."
+    : "Off: a used-up week is waited out, and a card that runs out unused is lost. Click to turn it on.");
+  b.append(el("i"));
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    if (b.disabled) return;
+    b.disabled = true;
+    try {
+      prefs = await writingPrefs(api("settings/zhipu-auto-reset", { id, on: !on }));
+      state.settings = prefs;
+      status(t(on ? "{who} no longer spends a reset card by itself" : "{who} spends a reset card by itself when its week runs out", { who: q.provider }), "ok");
+      renderQuotas();
     } catch (err) {
       b.disabled = false;
       status(err.message, "err");

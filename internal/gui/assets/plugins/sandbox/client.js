@@ -43,10 +43,16 @@ magpie.plugin("sandbox", (ctx) => {
   }
 
   async function save(patch) {
-    draft = { ...draft, ...patch };
+    // the text fields edit draft as they are typed; only "Save plan" should
+    // keep those. A switch or a menu sends its own field, over the plan as
+    // it was saved, so typing in Image and then changing Network doesn't
+    // keep the half-typed image.
+    const base = patch && Object.keys(patch).length ? state.plan : draft;
+    const next = { ...base, ...patch };
     try {
-      draft = await api("sandbox/save", draft);
-      state.plan = draft;
+      const saved = await api("sandbox/save", next);
+      draft = saved;
+      state.plan = saved;
       state = await api("sandbox"); // the broker's state with the new plan
       err = "";
     } catch (e) {

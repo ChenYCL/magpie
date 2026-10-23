@@ -147,6 +147,9 @@ func useZhipuReset(ctx context.Context, id string, p Provider, key, why string) 
 	subscriptionUsageCache.at = time.Time{}
 	subscriptionUsageCache.data = nil
 	subscriptionUsageCache.Unlock()
+	// the plan's card is read from planQuotaCache, not the one above: without
+	// this the page shows the card just spent for up to a minute
+	forgetPlanQuotas()
 	toldUsage()
 	return out, nil
 }

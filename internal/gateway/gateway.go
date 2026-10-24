@@ -4326,6 +4326,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if !s.fits(p.ID, toolStrictRefused, proto) {
 		body, _ = withoutToolStrict(proto, body)
 	}
+	// a stub for each tool the history called and tools lacks, to an
+	// upstream that turned such a call away before (undeclared_tools.go)
+	if !s.fits(p.ID, historyToolsRefused, proto) {
+		body, _, _ = withHistoryTools(proto, body)
+	}
 	// structured output an upstream turned away before (#2126): a schema
 	// as any JSON object, or the format told in the system prompt alone
 	if !s.fits(p.ID, formatRefused(model), proto) {
@@ -4374,6 +4379,24 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 		if res.StatusCode < 400 {
 			s.markUnfit(p.ID, mark, proto)
+		}
+	}
+	// a history call to a tool the request doesn't declare, or calls with
+	// no tools, turned away (pi's and T3 Code's tool_search,
+	// undeclared_tools.go): asked once more with a stub declared for each
+	// such tool, and so from then on
+	if badRequest(res.StatusCode) && s.fits(p.ID, historyToolsRefused, proto) {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		res.Body.Close()
+		res.Body = io.NopCloser(bytes.NewReader(b))
+		if nb, names, toolless := withHistoryTools(proto, body); len(names) > 0 && refusesHistoryTools(b, names, toolless) {
+			body = nb
+			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
+				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+			}
+			if res.StatusCode < 400 {
+				s.markUnfit(p.ID, historyToolsRefused, proto)
+			}
 		}
 	}
 	// a vendor that turns away the fields it doesn't know (Mistral's
@@ -5152,6 +5175,12 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			// the other magpie searches for it (search_remote.go)
 			body = withFields(body, map[string]any{"web_search_options": map[string]any{}})
 		}
+		if !s.fits(p.ID, historyToolsRefused, to) {
+			// a stub for each tool the history called and tools lacks,
+			// to an upstream that turned such a call away before
+			// (undeclared_tools.go)
+			body, _, _ = withHistoryTools(to, body)
+		}
 		if to == provider.CodeAssist && p.Account != nil {
 			// the envelope is named in there, where the id it carries is
 			// known: on Antigravity that is the variant the effort picked,
@@ -5247,6 +5276,16 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			// before, with reasoning_effort, and not sent them again
 			s.markUnfit(p.ID, thinkingConfigField, to)
 			continue
+		}
+		if badRequest(res.StatusCode) && s.fits(p.ID, historyToolsRefused, to) {
+			if _, names, toolless := withHistoryTools(to, body); len(names) > 0 && refusesHistoryTools(b, names, toolless) {
+				// a history call to a tool the request doesn't declare,
+				// or calls with no tools, turned away (pi's and T3 Code's
+				// tool_search): asked again with a stub declared for each
+				// such tool, and so from then on
+				s.markUnfit(p.ID, historyToolsRefused, to)
+				continue
+			}
 		}
 		if badRequest(res.StatusCode) && rootUnionRefusal.Match(b) && s.fits(p.ID, rootUnionRefused(model), to) {
 			if _, changed := objectRootsReq(req); changed {

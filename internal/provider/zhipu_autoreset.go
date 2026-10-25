@@ -107,11 +107,20 @@ func AutoUseZhipuReset(ctx context.Context, id string) (ResetOutcome, error) {
 		return ResetOutcome{}, err
 	}
 	r := zhipuPersonalResets(ctx, zcodeRoot(p.Chat), key)
-	// the five hours first: a weekly card resets both, so it is spent only
-	// when the week itself is used up
-	if t := windowUsedUp(ws, now, 5*time.Hour); t != nil && r != nil && r.FiveHour > 0 {
-		kind, why, back = "FIVE_HOUR", ResetUsedZhipuFiveHour, *t
-	} else if t := weekUsedUp(ws, now); t != nil && r != nil && r.Weekly > 0 {
+	// the five hours first, on its own card. A weekly card resets both
+	// windows, so with no five-hour card held it stands in for the five
+	// hours too — otherwise a week used up beside an empty five hours
+	// spends nothing while the plan sits idle.
+	five := windowUsedUp(ws, now, 5*time.Hour)
+	week := weekUsedUp(ws, now)
+	switch {
+	case five != nil && r != nil && r.FiveHour > 0:
+		kind, why, back = "FIVE_HOUR", ResetUsedZhipuFiveHour, *five
+	case (week != nil || five != nil) && r != nil && r.Weekly > 0:
+		t := week
+		if t == nil {
+			t = five
+		}
 		kind, why, back = "WEEK", ResetUsedZhipuWeek, *t
 	}
 	if kind == "" {

@@ -50,7 +50,7 @@ func zhipuResetServer(t *testing.T, weekly int) (*httptest.Server, *[]string) {
 func TestZhipuUseResetSpendsOneCard(t *testing.T) {
 	srv, used := zhipuResetServer(t, 2)
 	p := Provider{ID: "zai-codingplan", Chat: srv.URL + "/api/coding/paas/v4", Key: "glm-key"}
-	out, err := useZhipuReset(context.Background(), "zai-codingplan", p, "glm-key", ResetUsedZhipuHand)
+	out, err := useZhipuReset(context.Background(), "zai-codingplan", p, "glm-key", "WEEK", ResetUsedZhipuHand)
 	if err != nil || out.Code != "reset" {
 		t.Fatalf("use: %+v %v", out, err)
 	}
@@ -66,7 +66,7 @@ func TestZhipuUseResetSpendsOneCard(t *testing.T) {
 func TestZhipuUseResetNoneLeft(t *testing.T) {
 	srv, used := zhipuResetServer(t, 0)
 	p := Provider{ID: "zai-codingplan", Chat: srv.URL, Key: "glm-key"}
-	out, err := useZhipuReset(context.Background(), "zai-codingplan", p, "glm-key", ResetUsedZhipuHand)
+	out, err := useZhipuReset(context.Background(), "zai-codingplan", p, "glm-key", "WEEK", ResetUsedZhipuHand)
 	if err != nil || out.Code != "no_credit" {
 		t.Fatalf("use with none: %+v %v", out, err)
 	}
@@ -100,5 +100,23 @@ func TestWeekUsedUpIgnoresFiveHours(t *testing.T) {
 	ws[1].Used = 100
 	if got := weekUsedUp(ws, time.Now()); got == nil || !got.Equal(week) {
 		t.Fatalf("week used up: %v", got)
+	}
+}
+
+// The five-hour window is its own card now: full, it is found; a week-long
+// window is not mistaken for it.
+func TestWindowUsedUpFindsFiveHours(t *testing.T) {
+	soon := time.Now().Add(2 * time.Hour)
+	week := time.Now().Add(48 * time.Hour)
+	ws := []QuotaWindow{
+		{Name: "5 hours", Used: 100, Span: 5 * time.Hour, ResetsAt: &soon},
+		{Name: "7 days", Used: 100, Span: 7 * 24 * time.Hour, ResetsAt: &week},
+	}
+	if got := windowUsedUp(ws, time.Now(), 5*time.Hour); got == nil || !got.Equal(soon) {
+		t.Fatalf("five hours used up: %v", got)
+	}
+	ws[0].Used = 40
+	if windowUsedUp(ws, time.Now(), 5*time.Hour) != nil {
+		t.Fatal("a five-hour window with room left counted as used up")
 	}
 }

@@ -25,6 +25,7 @@ import (
 // hand.
 const (
 	ResetUsedZhipuWeek     = "zhipu-week"
+	ResetUsedZhipuFiveHour = "zhipu-five-hour"
 	ResetUsedZhipuExpiring = "zhipu-expiring"
 	ResetUsedZhipuHand     = "zhipu-hand"
 )
@@ -67,10 +68,23 @@ func zhipuResetKey(p Provider, keyName string) string {
 
 var zhipuAutoReset = autoResets{file: "zhipu-autoreset.json"}
 
-// AutoUseZhipuReset spends one weekly reset card of the GLM Coding Plan
-// key id if the user turned that on, its week is used up, it holds one,
-// and none was spent by itself in this week yet. Code is "" when none was
-// tried; the caller asks again only on "reset".
+// windowUsedUp is when the used-up window of span ends — the five hours' is
+// five hours long — or nil when it isn't full. A window a minute either
+// side still counts: the vendor's own length isn't exact.
+func windowUsedUp(windows []QuotaWindow, now time.Time, span time.Duration) *time.Time {
+	for _, w := range windows {
+		if w.Span > span-time.Hour && w.Span < span+time.Hour && !w.Aside && w.Used >= 100 && w.ResetsAt != nil && w.ResetsAt.After(now) {
+			return w.ResetsAt
+		}
+	}
+	return nil
+}
+
+// AutoUseZhipuReset spends one reset card of the GLM Coding Plan key id if
+// the user turned that on and none of that window was spent by itself yet:
+// a five-hour card when the five-hour window is used up and one is held, else
+// a weekly card when the week is. Code is "" when none was tried; the caller
+// asks again only on "reset".
 func AutoUseZhipuReset(ctx context.Context, id string) (ResetOutcome, error) {
 	if !ZhipuAutoReset(id) {
 		return ResetOutcome{}, nil
@@ -79,16 +93,44 @@ func AutoUseZhipuReset(ctx context.Context, id string) (ResetOutcome, error) {
 	if !ok {
 		return ResetOutcome{}, fmt.Errorf("no GLM Coding Plan key %q", id)
 	}
-	return zhipuAutoReset.use(id, func(now time.Time) (*time.Time, bool, error) {
-		_, ws, _, err := planKeyWindows(ctx, p, zhipuPlanSource(p), key)
-		if err != nil {
-			return nil, false, err
-		}
-		r := zhipuPersonalResets(ctx, zcodeRoot(p.Chat), key)
-		return weekUsedUp(ws, now), r != nil && r.Weekly > 0, nil
-	}, func() (ResetOutcome, error) {
-		return useZhipuReset(ctx, id, p, key, ResetUsedZhipuWeek)
-	})
+	kind, why := "", ""
+	var back time.Time
+	// read once, under the ledger's lock, so two requests can't both pick
+	// a card; each window keeps its own entry, so a five-hour spend doesn't
+	// block the week's
+	zhipuAutoReset.Lock()
+	defer zhipuAutoReset.Unlock()
+	zhipuAutoReset.load()
+	now := time.Now()
+	_, ws, _, err := planKeyWindows(ctx, p, zhipuPlanSource(p), key)
+	if err != nil {
+		return ResetOutcome{}, err
+	}
+	r := zhipuPersonalResets(ctx, zcodeRoot(p.Chat), key)
+	// the five hours first: a weekly card resets both, so it is spent only
+	// when the week itself is used up
+	if t := windowUsedUp(ws, now, 5*time.Hour); t != nil && r != nil && r.FiveHour > 0 {
+		kind, why, back = "FIVE_HOUR", ResetUsedZhipuFiveHour, *t
+	} else if t := weekUsedUp(ws, now); t != nil && r != nil && r.Weekly > 0 {
+		kind, why, back = "WEEK", ResetUsedZhipuWeek, *t
+	}
+	if kind == "" {
+		return ResetOutcome{}, nil
+	}
+	ledger := strings.ToLower(id + "#" + kind)
+	if s, ok := zhipuAutoReset.spent[ledger]; ok && now.Before(s.Until) {
+		return ResetOutcome{}, nil // one of this window already spent itself
+	}
+	out, err := useZhipuReset(ctx, id, p, key, kind, why)
+	if err != nil || out.Code != "reset" {
+		return out, err
+	}
+	if zhipuAutoReset.spent == nil {
+		zhipuAutoReset.spent = map[string]autoResetSpent{}
+	}
+	zhipuAutoReset.spent[ledger] = autoResetSpent{Until: back, At: time.Now(), Out: out}
+	zhipuAutoReset.save()
+	return out, nil
 }
 
 // SpendExpiringZhipuResets spends one weekly card of every GLM key the
@@ -109,7 +151,7 @@ func SpendExpiringZhipuResets(ctx context.Context) {
 			until := now.Add(autoResetWeek)
 			return &until, true, nil
 		}, func() (ResetOutcome, error) {
-			return useZhipuReset(ctx, id, p, key, ResetUsedZhipuExpiring)
+			return useZhipuReset(ctx, id, p, key, "WEEK", ResetUsedZhipuExpiring)
 		})
 		switch {
 		case err != nil:
@@ -126,15 +168,16 @@ func UseZhipuReset(ctx context.Context, id string) (ResetOutcome, error) {
 	if !ok {
 		return ResetOutcome{}, fmt.Errorf("no GLM Coding Plan key %q", id)
 	}
-	return useZhipuReset(ctx, id, p, key, ResetUsedZhipuHand)
+	return useZhipuReset(ctx, id, p, key, "WEEK", ResetUsedZhipuHand)
 }
 
-// useZhipuReset spends one weekly card and keeps the use under id. The
-// vendor picks the card; it spends the one that runs out first.
-func useZhipuReset(ctx context.Context, id string, p Provider, key, why string) (ResetOutcome, error) {
+// useZhipuReset spends one card of kind ("WEEK" or "FIVE_HOUR") and keeps
+// the use under id. The vendor picks the card of that kind; it spends the
+// one that runs out first.
+func useZhipuReset(ctx context.Context, id string, p Provider, key, kind, why string) (ResetOutcome, error) {
 	var spent any
 	err := zcodeCall(ctx, "POST", zcodeRoot(p.Chat)+"/api/biz/customer-package-reset/use", key,
-		map[string]string{"targetType": "PERSONAL", "resetType": "WEEK"}, &spent)
+		map[string]string{"targetType": "PERSONAL", "resetType": kind}, &spent)
 	if err != nil {
 		if strings.Contains(err.Error(), "No reset attempts") {
 			return ResetOutcome{Code: "no_credit"}, nil

@@ -1532,6 +1532,14 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if !in.AdditionalTools && old != nil {
 					in.AdditionalTools = old.AdditionalTools
 				}
+				if !in.AdditionalToolsOff && old != nil {
+					in.AdditionalToolsOff = old.AdditionalToolsOff
+				}
+				// and how long a request to it alone is kept while it is
+				// busy, set with `magpie provider set <id> patience=`
+				if in.Patience == 0 && old != nil {
+					in.Patience = old.Patience
+				}
 				// each account's own proxy likewise: {} clears them
 				if in.AccountProxies == nil && old != nil {
 					in.AccountProxies = old.AccountProxies

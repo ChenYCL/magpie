@@ -234,10 +234,15 @@ type Provider struct {
 	// additional_tools input item, as OpenAI's does: a deferred tool an
 	// Anthropic client's tool search loaded goes to it in such an item
 	// where the search loaded it, not in the top-level tools, which keeps
-	// the prompt's cached prefix (#2660). OpenAI's own API is sent one
-	// without it; another vendor isn't unless this is set, since xAI's
-	// turns the item away (#350).
+	// the prompt's cached prefix (#2660). OpenAI's own API and a ChatGPT
+	// (Codex) account are sent one without it (#4738: the ChatGPT backend
+	// takes the item where it was loaded, and its cache is kept); another
+	// vendor isn't unless this is set, since xAI's turns the item away
+	// (#350).
 	AdditionalTools bool `json:"additionalTools,omitempty"`
+	// AdditionalToolsOff, `additional-tools=off`, sends a loaded tool in
+	// the top-level tools even where magpie's default would send the item.
+	AdditionalToolsOff bool `json:"additionalToolsOff,omitempty"`
 
 	// NativeCompaction has Codex's compaction_trigger go to the provider
 	// as Codex sent it, and the compaction the provider writes back go to
@@ -701,6 +706,13 @@ func withPicks(a, pk Provider) Provider {
 	a.SwitchOnly = pk.SwitchOnly
 	a.Sink, a.NoModels = pk.Sink, pk.NoModels
 	a.NativeCompaction = pk.NativeCompaction
+	a.PromptAsWritten = pk.PromptAsWritten
+	// a deferred tool a tool search loaded goes where it was loaded, set
+	// with `magpie provider set <id> additional-tools=on` (#2660, #4738)
+	a.AdditionalTools, a.AdditionalToolsOff = pk.AdditionalTools, pk.AdditionalToolsOff
+	// Send requests unmasked, the user's for a subscription and a
+	// plugin's provider too (isee1_1 on Discord)
+	a.Unredacted = pk.Unredacted
 	a.Proxy, a.AccountProxies, a.AccountModels = pk.Proxy, pk.AccountProxies, pk.AccountModels
 	a.AccountCaps, a.AccountWindowCaps = pk.AccountCaps, pk.AccountWindowCaps
 	a.AccountNames = pk.AccountNames

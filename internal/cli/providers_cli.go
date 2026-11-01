@@ -44,7 +44,13 @@ const providerUsage = `usage:
                                           Copilot), compaction=magpie, the default, has magpie summarise
                                           additional-tools=on sends a tool Claude Code's tool search loads to its
                                           Responses API where it was loaded (an additional_tools item, which
-                                          keeps the cache); additional-tools=default puts it with the other tools
+                                          keeps the cache); OpenAI's API and a ChatGPT (Codex) account do so by
+                                          default; additional-tools=off puts it with the other tools,
+                                          additional-tools=default is magpie's
+                                          patience=2m keeps a request to it alone (not through a group) that long
+                                          while it is busy or briefly rate limited, asking again after a pause
+                                          (at most 4m); patience=off hands the agent the error at once;
+                                          patience=default, 1m
   magpie provider key <id> <key>          change the API key
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
@@ -1042,14 +1048,18 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 		case "additional-tools":
 			// on: a tool an Anthropic client's tool search loads goes to
 			// the provider's Responses API in an additional_tools item
-			// where it was loaded, which keeps the cached prefix (#2660)
+			// where it was loaded, which keeps the cached prefix (#2660);
+			// off: in the tools, where magpie's default sends the item
+			// (OpenAI's API, a ChatGPT account, #4738); default: magpie's
 			switch strings.ToLower(v) {
 			case "on", "yes":
-				p.AdditionalTools = true
-			case "default", "no", "off":
-				p.AdditionalTools = false
+				p.AdditionalTools, p.AdditionalToolsOff = true, false
+			case "off", "no":
+				p.AdditionalTools, p.AdditionalToolsOff = false, true
+			case "default":
+				p.AdditionalTools, p.AdditionalToolsOff = false, false
 			default:
-				return fmt.Errorf("additional-tools=on|default, not %q", v)
+				return fmt.Errorf("additional-tools=on|off|default, not %q", v)
 			}
 		case "user-agent", "ua":
 			// agent: a request goes with the User-Agent the agent that

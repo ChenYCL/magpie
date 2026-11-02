@@ -65,6 +65,31 @@ run was offered it. `subscriptionRun.names` (`bridgeNames`) maps it back
 to the declared name in `toolStart`, for streamed and whole messages, and
 in `mcpCall` (#2649).
 
+A client's MCP tool that it announced but hasn't loaded (Claude Code's
+tool search names deferred tools in a reminder and leaves them out of
+`tools` until `ToolSearch` loads them) is no tool of the run's, but the
+run's model reads its name in the conversation and calls it,
+`mcp__magpie__<server>__<tool>`. `toolStart` hands that call over under
+the full name, which is the client's own, when the cut name maps to
+nothing and isn't in `subscriptionRun.tools`: handed over cut, as
+`<server>__<tool>`, the client answered "No such tool available" and the
+model had to load it and call again (packinggoods, 11-02,
+`TestClaudeBridgeHandsOverAnUnloadedMagpieTool`). A deferred tool of
+another client MCP server (`mcp__linear__…`) is still not handed over.
+
+A turn with `tool_choice` none is offered every tool the client sent, as
+any other turn is (bbfatx on X). Anthropic caches a prompt as tools, then
+system, then messages, so a turn offered fewer tools (a title or summary
+asked with the tools as ever) was a prefix the cache had never seen, and
+all of it, Claude Code's own tools and system prompt included, was written
+again. What a turn may call is kept apart from what it is offered:
+`subscriptionRun.allowed`, set at start, on resume and with tool results.
+A call the turn makes anyway is answered at once with an error result
+(`mcpCall`), `toolStart` treats it as Claude Code's own call, and the
+client never sees it. A named `tool_choice` still offers only that tool.
+`TestClaudeToolChoiceNoneKeepsTheTools` holds it.
+
+
 The run's MCP server is magpie itself (`magpie claude-mcp-helper`,
 `internal/claudebridge`), which hands each tool call back to the gateway
 at `POST /_magpie/claude-mcp/<token>` (`mcpCall`), where the call is

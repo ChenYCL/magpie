@@ -273,6 +273,50 @@ func TestModelImage(t *testing.T) {
 	}
 }
 
+// A model whose vendor says nothing of what it takes can be told: a box
+// serving a video-taking Qwen whose list carries only its id. What the
+// user says stands in for the list's kinds, and is what an agent's model
+// list, and so what every picker reading it, is told.
+func TestModelInputs(t *testing.T) {
+	prefsHome(t)
+	if err := Save(Provider{ID: "c", Name: "C", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"taker"}}); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := entry(t, "c/taker").Modalities(); slices.Contains(in, "video") {
+		t.Fatalf("unsaid takes %v", in)
+	}
+	if err := SetModelInputs("c/taker", []string{"text", "image", "video"}); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := entry(t, "c/taker").Modalities(); !slices.Equal(in, []string{"text", "image", "video"}) {
+		t.Fatalf("said takes %v", in)
+	}
+	// a kind it isn't refused, and nothing kept of it
+	if err := SetModelInputs("c/taker", []string{"text", "smell"}); err == nil {
+		t.Fatal("smell accepted")
+	}
+	if in, _ := entry(t, "c/taker").Modalities(); !slices.Equal(in, []string{"text", "image", "video"}) {
+		t.Fatalf("refused changed it: %v", in)
+	}
+	// said to take text alone: the list's kinds are gone, image included
+	if err := SetModelInputs("c/taker", []string{"text"}); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := entry(t, "c/taker").Modalities(); !slices.Equal(in, []string{"text"}) {
+		t.Fatalf("text only takes %v", in)
+	}
+	// nil is the vendor's say again
+	if err := SetModelInputs("c/taker", nil); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := entry(t, "c/taker").Modalities(); slices.Contains(in, "video") {
+		t.Fatalf("reset takes %v", in)
+	}
+	if _, ok := settings.Load().ModelInputs["c/taker"]; ok {
+		t.Fatal("override kept")
+	}
+}
+
 // Renaming a provider moves what the user gave its models in every
 // per-model map. The settings walk them by the convention themselves — each
 // map[string]X of Settings named Model*, the ones there are now and any

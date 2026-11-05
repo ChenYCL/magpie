@@ -635,6 +635,13 @@ type Settings struct {
 	// ModelImages is whether the user said a model takes images, by
 	// "<provider id>/<model id>". Absent leaves it to the vendor's list.
 	ModelImages map[string]bool `json:"modelImages,omitempty"`
+	// ModelInputs is what the user said a model takes, by "<provider
+	// id>/<model id>": text, image, audio, video or pdf, for a provider
+	// whose own list says nothing of a kind it does serve — a vLLM box
+	// serving a video-taking Qwen, whose list says only that it exists.
+	// Absent leaves it to the vendor's list, models.dev and ModelImages
+	// (see provider.SetModelInputs).
+	ModelInputs map[string][]string `json:"modelInputs,omitempty"`
 	// ModelPrices is what a model costs the user, in USD per million
 	// tokens, by "<provider id>/<model id>", and "*" for every model of
 	// that provider: a provider models.dev does not list, or one that

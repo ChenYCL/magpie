@@ -2446,12 +2446,22 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	if override, ok := s.ModelImages[p.ID+"/"+m.ID]; ok {
 		images, imageInput = override, &override
 	}
+	// what the user said it takes stands in for its list's kinds, images
+	// among them: a box serving a video-taking model whose list says it
+	// exists and nothing else (SetModelInputs). A say that leaves image
+	// out is a model said not to see, as ModelImages would say it.
+	inputs := m.InputModalities
+	if said, ok := s.ModelInputs[p.ID+"/"+m.ID]; ok {
+		inputs = said
+		images = slices.Contains(said, "image")
+		imageInput = &images
+	}
 	// a model its vendor lists with no name is called by its id: unnamed,
 	// an agent's list showed the whole magpie/<provider>/<model> (#955)
 	name := cmp.Or(m.Name, m.ID)
 	e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Family: p.Family, Name: name, Efforts: effortsOf(m), Provider: p,
 		Images: images, ImageInput: imageInput, Context: ctx, WindowSet: p.ContextOf(m.ID) > 0, Output: output, OutputSet: outputOf(s, p.ID, m.ID) > 0, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Tiers: m.Tiers, Released: m.Released,
-		Inputs: m.InputModalities, Outputs: m.OutputModalities}
+		Inputs: inputs, Outputs: m.OutputModalities}
 	if n, ok := modelNameIn(s.ModelNames, p.ID, m.ID); ok {
 		e.Name, e.Default = n, name
 	} else {

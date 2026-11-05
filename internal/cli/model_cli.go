@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
@@ -23,6 +24,9 @@ const modelUsage = `usage:
   magpie model efforts <provider/model> <l>,<l>  offer only these of them, e.g. low,medium,high
   magpie model efforts <provider/model> --reset  offer every level it has again
   magpie model efforts <provider/model> off      send it no reasoning field at all
+  magpie model inputs <provider/model>           what it takes: text, image, audio, video, pdf
+  magpie model inputs <provider/model> <k>,<k>   say what it takes, for a vendor whose list says nothing
+  magpie model inputs <provider/model> --reset   take your say off it, back to its vendor's list
   magpie model price <provider/model>            what the model costs you, and what you said it costs
   magpie model price <provider/model> <in>,<out>,<cache read>,<cache write>
                                                  say what it costs, in USD per million tokens, all four parts as
@@ -101,6 +105,8 @@ func modelCmd(args []string) error {
 		return modelName(args[1:])
 	case "efforts", "effort", "levels":
 		return modelEfforts(args[1:])
+	case "inputs", "takes":
+		return modelInputs(args[1:])
 	case "price", "cost":
 		return modelPrice(args[1:])
 	case "prices":
@@ -273,6 +279,54 @@ func modelEfforts(args []string) error {
 	} else {
 		fmt.Println(green.Render("✓"), id, muted.Render("offers every level it has"), faint.Render(strings.Join(all, ", ")))
 	}
+	return nil
+}
+
+// modelInputs is what a model takes, and the user's say over it: for a
+// box whose list names the model and nothing of what it takes.
+func modelInputs(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%s", modelUsage)
+	}
+	p, model, err := modelRef(args[0])
+	if err != nil {
+		return err
+	}
+	id := p.ID + "/" + model
+	rest := args[1:]
+	if len(rest) == 0 {
+		said, has := settings.Load().ModelInputs[id]
+		vendor := ""
+		for _, m := range p.Available() {
+			if m.ID == model {
+				vendor = strings.Join(m.InputModalities, " ")
+				break
+			}
+		}
+		if has {
+			fmt.Println(bold.Render(strings.Join(said, " ")), muted.Render("· "+id+" · you said so"))
+		} else if vendor != "" {
+			fmt.Println(bold.Render(vendor), muted.Render("· "+id+" · its vendor's list"))
+		} else {
+			fmt.Println(bold.Render("text"), muted.Render("· "+id+" · nothing said what it takes; magpie takes text"))
+		}
+		return nil
+	}
+	if isReset(rest) {
+		if err := provider.SetModelInputs(id, nil); err != nil {
+			return err
+		}
+		fmt.Println(green.Render("✓"), id, muted.Render("takes what its vendor's list says again"))
+		return nil
+	}
+	kinds := strings.FieldsFunc(strings.Join(rest, " "), func(r rune) bool {
+		return r == ',' || unicode.IsSpace(r)
+	})
+	if err := provider.SetModelInputs(id, kinds); err != nil {
+		return err
+	}
+	said, _ := settings.Load().ModelInputs[id]
+	fmt.Println(green.Render("✓"), id, muted.Render("takes"), bold.Render(strings.Join(said, " ")))
 	return nil
 }
 

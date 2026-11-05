@@ -406,6 +406,66 @@ func setModelImage(ref string, images *bool) (bool, error) {
 	return true, nil
 }
 
+// InputKinds are the kinds of input a model may be said to take: the ones a
+// vendor's list may carry, in the order magpie reports them.
+var InputKinds = []string{"text", "image", "audio", "video", "pdf"}
+
+// SetModelInputs says what a provider's model, spelt "provider/model",
+// takes: any of InputKinds, in the order the user gave. It stands in place
+// of what the vendor's list says, for a provider whose list says nothing of
+// a kind it does serve; nil gives that answer back. Images stay separate
+// (SetModelImage): a model said to take images keeps taking them even when
+// the list here leaves image out, as one said not to keeps not.
+func SetModelInputs(ref string, kinds []string) error {
+	return touchedIf(setModelInputs(ref, kinds))
+}
+
+func setModelInputs(ref string, kinds []string) (bool, error) {
+	p, model, err := splitRef(ref)
+	if err != nil {
+		return false, err
+	}
+	if kinds != nil && !p.serves(model) {
+		return false, fmt.Errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
+	}
+	kept := make([]string, 0, len(kinds))
+	for _, k := range kinds {
+		k = strings.ToLower(strings.TrimSpace(k))
+		if k == "" {
+			continue
+		}
+		if !slices.Contains(InputKinds, k) {
+			return false, fmt.Errorf("%q is not a kind of input (they are %s)", k, strings.Join(InputKinds, ", "))
+		}
+		if !slices.Contains(kept, k) {
+			kept = append(kept, k)
+		}
+	}
+	if kinds != nil && len(kept) == 0 {
+		return false, fmt.Errorf("say what it takes: %s", strings.Join(InputKinds, ", "))
+	}
+	s := settings.Load()
+	key := p.ID + "/" + model
+	if kinds == nil {
+		if _, ok := s.ModelInputs[key]; !ok {
+			return false, nil
+		}
+		delete(s.ModelInputs, key)
+	} else {
+		if cur, ok := s.ModelInputs[key]; ok && slices.Equal(cur, kept) {
+			return false, nil
+		}
+		if s.ModelInputs == nil {
+			s.ModelInputs = map[string][]string{}
+		}
+		s.ModelInputs[key] = kept
+	}
+	if err := settings.Save(s); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // SetModelAPI says which one of a provider's APIs a model is asked on —
 // chat, responses, anthropic or gemini — for a relay whose one key serves some of
 // its models on one and others on another (01huadalang on Discord: 有的供应商

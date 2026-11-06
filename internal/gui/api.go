@@ -1012,6 +1012,11 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", devPage(revalidated(http.FileServer(http.FS(staticFS())))))
 	redteamRoutes(mux)
+	// the Agent presets page and a provider's proxy pool: the merge of
+	// upstream main left them defined and never called, so /api/presets
+	// answered 404 while presets.json still held the user's say
+	presetsRoutes(mux)
+	poolRoutes(mux)
 	sandboxRoutes(mux)
 	devRoutes(mux)
 	pluginPageRoutes(mux, isWeb(w))

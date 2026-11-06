@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -94,7 +96,20 @@ func pricedRoutes(routes []gateway.Route) []routeJSON {
 		}
 	}
 	titles := sessions.CodexTitles(ids)
+	var loose []string
 	for _, r := range routes {
+		if k := looseConv(r); k != "" {
+			loose = append(loose, k)
+		}
+	}
+	owners := convSessions(loose)
+	pub := publicRefs()
+	for _, r := range routes {
+		r = publicRoute(r, pub)
+		if k := looseConv(r); k != "" && owners[k] != "" {
+			r.Session = owners[k]
+		}
+		r.Usage = cacheCounted(r.Usage)
 		recs := make([]usage.Record, len(r.Usage))
 		for i, u := range r.Usage {
 			recs[i] = u.PricingRecord()
@@ -115,18 +130,165 @@ func pricedRoutes(routes []gateway.Route) []routeJSON {
 	return out
 }
 
+// convAgents are the agents whose own session files say which of the
+// gateway's conversation ids are theirs (sessions' Convs): dsh's, whose
+// chat-completions and messages routes send no session id
+// (changqiu4890 on Discord: Routing put every dsh request under "No
+// session ID").
+var convAgents = map[string]bool{"dsh": true}
+
+// looseConv is the agent and conversation id (convOwners' key) of a route
+// of such an agent that names no session, "" for any other.
+func looseConv(r gateway.Route) string {
+	if r.Session != "" || r.ParentSession != "" || r.Conv == "" || !convAgents[r.Agent] {
+		return ""
+	}
+	return r.Agent + "\x00" + r.Conv
+}
+
+// routeConvs is convOwners of the sessions listed, for every trace the
+// Routing page polls: listing the sessions reads every agent's folder, so
+// it is made again only when it is convsKept old, or convsFresh old and a
+// route's conversation isn't in it (a session begun since).
+var routeConvs struct {
+	sync.Mutex
+	at time.Time
+	of map[string]string // replaced, never changed: read outside the lock
+}
+
+var convsFresh, convsKept = 2 * time.Second, time.Minute
+
+// convSessions is convOwners for keys (looseConv's), nil when there are
+// none, so a page with no such route lists nothing.
+func convSessions(keys []string) map[string]string {
+	if len(keys) == 0 {
+		return nil
+	}
+	routeConvs.Lock()
+	defer routeConvs.Unlock()
+	age := time.Since(routeConvs.at)
+	stale := routeConvs.of == nil || age >= convsKept
+	if !stale && age >= convsFresh {
+		for _, k := range keys {
+			if _, ok := routeConvs.of[k]; !ok {
+				stale = true
+				break
+			}
+		}
+	}
+	if stale {
+		routeConvs.of, routeConvs.at = convOwners(sessions.List(0)), time.Now()
+	}
+	return routeConvs.of
+}
+
+// cacheCounted marks the usage of a vendor that counts no cache as such,
+// kept before its plugin said so (usage.CountsNoCache): its hit rate is
+// none rather than 0% (#3464). us is copied before it is changed.
+func cacheCounted(us []gateway.RouteUsage) []gateway.RouteUsage {
+	var out []gateway.RouteUsage
+	for i, u := range us {
+		if u.CacheUnknown || !cacheNotCounted(u) {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(us)
+		}
+		out[i].CacheUnknown = true
+	}
+	if out == nil {
+		return us
+	}
+	return out
+}
+
+// cacheNotCounted is whether u's vendor counted no cache for it: it said
+// so, or it never does and none was recorded.
+func cacheNotCounted(u gateway.RouteUsage) bool {
+	return u.CacheUnknown || u.CacheRead+u.CacheWrite == 0 && usage.CountsNoCache(u.Provider)
+}
+
+// publicRefs is provider.PublicRef, each ref looked up once: a page of
+// routes names a few models many times over.
+func publicRefs() func(string) string {
+	seen := map[string]string{}
+	return func(ref string) string {
+		if ref == "" {
+			return ref
+		}
+		out, ok := seen[ref]
+		if !ok {
+			out = provider.PublicRef(ref)
+			seen[ref] = out
+		}
+		return out
+	}
+}
+
+// publicRoute is r as the Routing page names it: a group magpie found by
+// the id agents pick it by, auto/<model>, wherever r names one — the
+// model asked for, the request a search or an image was for, a subagent's
+// pick, the group and the groups in it (未寒 on Discord: the live view
+// still said group/auto-<model>). The gateway keeps group/auto-<slug> in
+// the trace and its history (provider.CanonicalRef); r's own pointers are
+// the trace's, so what changes is copied first.
+func publicRoute(r gateway.Route, pub func(string) string) gateway.Route {
+	r.Model = pub(r.Model)
+	if r.For != nil {
+		f := *r.For
+		f.Model = pub(f.Model)
+		r.For = &f
+	}
+	if r.Subagent != nil {
+		s := *r.Subagent
+		s.Asked, s.To = pub(s.Asked), pub(s.To)
+		r.Subagent = &s
+	}
+	if g := r.Group; g != nil {
+		c := *g
+		if c.Ref == "" { // history written before the trace kept it
+			c.Ref = pub(provider.GroupPrefix + c.ID)
+		}
+		c.Subs = slices.Clone(c.Subs)
+		for i, sub := range c.Subs {
+			if sub.Ref == "" {
+				c.Subs[i].Ref = pub(provider.GroupPrefix + sub.ID)
+			}
+		}
+		r.Group = &c
+	}
+	return r
+}
+
 // mainView is the tab the window is asked to open on, as the page's view
 // parameter: the Routing page on one request (req, its id) when the tray
-// panel's Routing tab asks for it, or the Usage page's Requests on one
+// panel's Routing tab asks for it, Masking on one request's record (key)
+// when a masked call's badge there does, or the Usage page's Requests on one
 // provider or agent when its Usage tab does, its Overview (the allowances)
-// when a menu-bar cell's click does. Anything but an id, or a name of the
-// kind a provider or an agent has, is dropped.
+// when a menu-bar cell's click does, or Plugins' Discover, looking for what
+// the panel's add sheet found nothing by (q), when its More in Plugins
+// does. Anything but an id, a name of the kind a provider or an agent has,
+// or a line of text to look for, is dropped.
 func mainView(q url.Values) string {
 	view := q.Get("view")
 	switch view {
+	case "plugins":
+		// q, even empty, says Discover: without it the page opens on the
+		// tab visited last (#3579)
+		if f, ok := q["q"]; ok {
+			s := ""
+			if mainFind.MatchString(f[0]) {
+				s = f[0]
+			}
+			view += "&q=" + url.QueryEscape(s)
+		}
 	case "routing":
 		if id, err := strconv.ParseInt(q.Get("req"), 10, 64); err == nil && id > 0 {
 			view += "&req=" + strconv.FormatInt(id, 10)
+		}
+	case "masking":
+		if key, err := strconv.ParseInt(q.Get("key"), 10, 64); err == nil && key > 0 {
+			view += "&key=" + strconv.FormatInt(key, 10)
 		}
 	case "usage":
 		if tab := q.Get("tab"); tab == "requests" || tab == "usage" {
@@ -151,6 +313,9 @@ func mainView(q url.Values) string {
 
 // mainName is the id of a provider or an agent.
 var mainName = regexp.MustCompile(`^[A-Za-z0-9._@:/ -]{1,80}$`)
+
+// mainFind is a line of text to look for, as a search field holds one.
+var mainFind = regexp.MustCompile(`^[^\x00-\x1f\x7f]{0,100}$`)
 
 // mainURL is the window's page for a view as mainView gives it, the
 // request's id kept as its own parameter (the panel's link to one request,
@@ -181,6 +346,59 @@ func quotaView(id string) string {
 	return view
 }
 
+// withGatewayTitles fills in, for each agent:id key the agent's own files
+// left without a title, the first words its user said through the gateway,
+// as the Sessions page heads a session it knows only from there
+// (flandern1211_58540 on Discord: Routing named a session by its folder and
+// id). Nothing is read that the Sessions page doesn't show already.
+func withGatewayTitles(out map[string]string, keys []string) map[string]string {
+	var title func(agent, id string) string
+	for _, k := range keys {
+		agent, id, ok := strings.Cut(k, ":")
+		if !ok || id == "" || out[k] != "" {
+			continue
+		}
+		if title == nil {
+			title = sessions.GatewayTitler()
+		}
+		// recorded under the agent its User-Agent named, as a route's
+		// agent may not have been
+		name := title(agent, id)
+		if name == "" {
+			if a := usage.AgentOf(agent); a != agent {
+				name = title(a, id)
+			}
+		}
+		if name != "" {
+			out[k] = name
+		}
+	}
+	return out
+}
+
+// codexReadableTitles is each Codex thread's name from Codex's index, else
+// the title its own files give (its first prompt, as the Sessions page
+// heads it), else the first words recorded through the gateway: a thread
+// never named was headed by its folder and id alone.
+func codexReadableTitles(ids []string) map[string]string {
+	out := sessions.CodexTitles(ids)
+	var keys []string
+	for _, id := range ids {
+		if id != "" && out[id] == "" {
+			keys = append(keys, "codex:"+id)
+		}
+	}
+	if len(keys) == 0 {
+		return out
+	}
+	for k, name := range withGatewayTitles(sessions.Titles(keys), keys) {
+		if name != "" {
+			out[strings.TrimPrefix(k, "codex:")] = name
+		}
+	}
+	return out
+}
+
 // traceRoutes serves the routing trace for the Gateway view to play: it
 // waits up to 25 s for something to change after the seq it is given, so
 // the page hears of a request as it happens.
@@ -204,7 +422,7 @@ func traceRoutes(mux *http.ServeMux) {
 			return
 		}
 		if len(in.Sessions) > 0 && len(in.IDs) == 0 {
-			writeJSON(rw, map[string]any{"titles": sessions.Titles(in.Sessions)})
+			writeJSON(rw, map[string]any{"titles": withGatewayTitles(sessions.Titles(in.Sessions), in.Sessions)})
 			return
 		}
 		if !in.Groups {
@@ -241,7 +459,7 @@ func traceRoutes(mux *http.ServeMux) {
 				in.IDs = append(in.IDs, row.ParentSession)
 			}
 		}
-		writeJSON(rw, map[string]any{"names": sessions.CodexTitles(in.IDs), "parents": parents, "matched": matched,
+		writeJSON(rw, map[string]any{"names": codexReadableTitles(in.IDs), "parents": parents, "matched": matched,
 			"resetInferred": in.Day != "" && rows == nil})
 	})
 	mux.HandleFunc("GET /api/gateway/route", func(rw http.ResponseWriter, r *http.Request) {
@@ -296,7 +514,28 @@ func traceRoutes(mux *http.ServeMux) {
 		day := r.URL.Query().Get("day")
 		days, routes, cut := gateway.History(day)
 		rememberTitleHistory(day, routes)
-		writeJSON(rw, map[string]any{"days": days, "routes": pricedRoutes(routes), "cut": cut})
+		out := map[string]any{"days": days, "routes": pricedRoutes(routes), "cut": cut}
+		if day == "" {
+			// the live page's accounts and keys say tried and answered of
+			// the day the Usage page reads, not of the last few requests
+			// the trace still keeps (#3351)
+			out["tallies"] = gateway.DayTallies()
+		}
+		writeJSON(rw, out)
+	})
+	// the report saved of a request held too long before routing, for its
+	// row's Copy Report: the app's log goes only to stderr, which its user
+	// can't reach. A magpie serving the gateway for this one (OwnerTrace)
+	// saves it in the same folder.
+	mux.HandleFunc("GET /api/gateway/held/{name}", func(rw http.ResponseWriter, r *http.Request) {
+		text, err := gateway.HeldReport(r.PathValue("name"))
+		if err != nil {
+			rw.Header().Set("Content-Type", "application/json")
+			rw.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(rw).Encode(map[string]string{"error": "This report is no longer kept: magpie keeps the last 5."})
+			return
+		}
+		writeJSON(rw, map[string]string{"text": text})
 	})
 	// an account's rest lifted by hand: verified with its vendor, say
 	mux.HandleFunc("POST /api/gateway/unrest", func(rw http.ResponseWriter, r *http.Request) {

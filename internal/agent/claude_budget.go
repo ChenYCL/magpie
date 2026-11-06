@@ -26,13 +26,13 @@ type claudeBudget struct {
 	id     string // as Claude Code is handed it: its key under modelSettings
 	window int    // its window, 0 when unknown
 	long   bool   // Claude Code takes it for 1M by its id ("[1m]")
-	// Claude Code's main model: a long one's window is the one told too,
-	// so the main runs to its own should Claude Code stop taking it for
-	// 1M, and nothing written reads as holding it to a smaller tier's
-	main bool
 	// the auto-compact window magpie gives it: 0 for the top-level one
 	// (base), below 0 for none, its whole window
 	compact int
+	// Claude Code runs it as a Claude model it knows (a Desktop tier's
+	// pick, behavesAs: gateway.DesktopBehavesAs), and so at that model's
+	// window, not at the one it is told: it always gets its own entry
+	behaves bool
 }
 
 // claudeLong is the window Claude Code takes a "[1m]" model for.
@@ -66,7 +66,13 @@ func claudePlan(models []claudeBudget, base int, theirs map[string]string) (top 
 		switch {
 		case !m.long && m.window > top:
 			top = m.window
-		case m.long && m.main:
+		case m.long:
+			// a long one's window is the one told too, so it runs to its
+			// own should Claude Code stop taking it for 1M (the 1M beta
+			// turned away once, CLAUDE_CODE_DISABLE_1M_CONTEXT), and
+			// nothing written reads as holding it to a smaller model's: a
+			// 1M model Desktop lists by its 1M id alone beside a 272K GPT
+			// ran at 272K (dumplings on Discord, Full window on)
 			top = max(top, cmp.Or(m.window, claudeLong))
 		}
 	}
@@ -107,7 +113,7 @@ func claudePlan(models []claudeBudget, base int, theirs map[string]string) (top 
 		if base > 0 {
 			had = min(base, assumed)
 		}
-		if want == had {
+		if want == had && !m.behaves {
 			continue
 		}
 		id := strings.TrimSuffix(m.id, "[1m]")

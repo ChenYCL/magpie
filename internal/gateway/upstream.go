@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"strings"
 
@@ -170,7 +171,12 @@ func carriedError(data string) (ev Event, ok bool) {
 	if t != "error" && t != "response.failed" && !carries(v.Error) && !carries(r.Error) {
 		return Event{}, false
 	}
-	return Event{Kind: KError, Text: streamErrorText(data, r.Error, v.Error), Code: refusedCode(data)}, true
+	code, status, said := filterRefused(data)
+	if status == 0 {
+		// the status the error names for itself (#4855)
+		status = cmp.Or(namedStatusOf(r.Error), namedStatusOf(v.Error))
+	}
+	return Event{Kind: KError, Text: streamErrorText(data, r.Error, v.Error), Code: code, Status: status, Said: said}, true
 }
 
 // streamErrorText is what an upstream's error event says: the message of

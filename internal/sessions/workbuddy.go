@@ -40,17 +40,67 @@ func WorkBuddyDir() string {
 // a session's own <id>.jsonl, and a subagent's under <id>/subagents/.
 func workbuddyFiles() []file { return buddyFiles("workbuddy", WorkBuddyDir()) }
 
+// WorkBuddyAIDir is WorkBuddy AI's folder, the international build's
+// (www.workbuddy.ai): ~/.workbuddy-ai, its cli/product.json's
+// dataFolderName, as internal/agent's workbuddy.go wires it.
+func WorkBuddyAIDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".workbuddy-ai")
+}
+
+// workbuddyAIFiles are WorkBuddy AI's sessions, kept as the China build
+// keeps its own, in its own folder: listed under its own agent, not
+// WorkBuddy's, so someone signed in to both apps finds each one's
+// (maxleebeta on Discord: the international build was missing from the
+// Sessions page's agents). None when its folder is WorkBuddy's (a link),
+// which workbuddyFiles reads already.
+func workbuddyAIFiles() []file {
+	if sameFolder(WorkBuddyAIDir(), WorkBuddyDir()) {
+		return nil
+	}
+	return buddyFiles("workbuddy-ai", WorkBuddyAIDir())
+}
+
 // codebuddyFiles are the same under CodeBuddy Code's projects/: the CLI keeps
-// them as its desktop sibling does, one agent's folder apart (#1779).
-func codebuddyFiles() []file { return buddyFiles("codebuddy", CodeBuddyDir()) }
+// them as its desktop sibling does, one agent's folder apart (#1779). None
+// when its folder is WorkBuddy's, which workbuddyFiles reads already.
+func codebuddyFiles() []file {
+	if codebuddyInWorkBuddy() {
+		return nil
+	}
+	return buddyFiles("codebuddy", CodeBuddyDir())
+}
+
+// codebuddyInWorkBuddy is whether CodeBuddy Code's folder is WorkBuddy's
+// ($CODEBUDDY_CONFIG_DIR set to ~/.workbuddy, or a link to it). Its sessions
+// are then read once, as WorkBuddy's: read as both, each was listed and
+// counted twice, and one refresh took each path twice (#2932).
+func codebuddyInWorkBuddy() bool { return sameFolder(CodeBuddyDir(), WorkBuddyDir()) }
+
+// sameFolder is whether a and b are one folder on disk, however each is
+// spelled (a link, a letter's case where the disk ignores it). A folder
+// that can't be read is no other.
+func sameFolder(a, b string) bool {
+	x, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	y, err := os.Stat(b)
+	return err == nil && os.SameFile(x, y)
+}
 
 // isBuddy is whether agent keeps its sessions the way WorkBuddy does: its
-// own, or CodeBuddy Code's.
-func isBuddy(agent string) bool { return agent == "workbuddy" || agent == "codebuddy" }
+// own, WorkBuddy AI's, or CodeBuddy Code's.
+func isBuddy(agent string) bool {
+	return agent == "workbuddy" || agent == "workbuddy-ai" || agent == "codebuddy"
+}
 
 // buddyFiles are the sessions under projects/ in dir, as agent's: WorkBuddy's,
 // or CodeBuddy Code's, which keeps them the same way.
 func buddyFiles(agent, dir string) []file {
+	if !Reads(agent) {
+		return nil
+	}
 	var out []file
 	walkLinked(filepath.Join(dir, "projects"), func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") {

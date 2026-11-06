@@ -92,6 +92,74 @@ func TestGrokBodyDropsLoneToolChoice(t *testing.T) {
 	}
 }
 
+// The Grok plugin is handed a lone tool_choice "none" (#3110): it reads it
+// before adding x_search, and leaves it out before Grok. Any other lone
+// tool_choice still goes, and the built-in, which is Grok's last stop,
+// sends no lone "none" either.
+func TestGrokPluginBodyKeepsLoneNone(t *testing.T) {
+	for _, in := range []string{
+		`{"model":"grok-4.7","tool_choice":"none","input":[]}`,
+		`{"model":"grok-4.7","tools":[],"tool_choice":"none","input":[]}`,
+		`{"model":"grok-4.7","tools":[{"type":"custom","name":"apply_patch"}],"tool_choice":"none","input":[]}`,
+	} {
+		if got := string(grokPluginBody([]byte(in))); !strings.Contains(got, `"tool_choice":"none"`) {
+			t.Errorf("plugin: %s\n-> %s", in, got)
+		}
+		if got := string(grokBody([]byte(in))); strings.Contains(got, "tool_choice") {
+			t.Errorf("built-in: %s\n-> %s", in, got)
+		}
+	}
+	for _, in := range []string{
+		`{"model":"grok-4.7","tool_choice":"auto","input":[]}`,
+		`{"model":"grok-4.7","tool_choice":{"type":"none"},"input":[]}`,
+	} {
+		if got := string(grokPluginBody([]byte(in))); strings.Contains(got, "tool_choice") {
+			t.Errorf("plugin: %s\n-> %s", in, got)
+		}
+	}
+}
+
+// The Grok plugin is handed a tool_choice object of a type Grok's backend
+// doesn't take (#3153), as an allowed_tools naming the client's own tools:
+// it reads it instead of adding x_search over it, and leaves it out before
+// Grok. The built-in, which is Grok's last stop, still drops it: the
+// backend turns the request away over one.
+func TestGrokPluginBodyKeepsUnsupportedToolChoice(t *testing.T) {
+	in := []byte(`{"model":"grok-4.7","tool_choice":{"type":"allowed_tools","mode":"auto","tools":[{"type":"function","name":"read_file"}]},"tools":[{"type":"function","name":"read_file"}]}`)
+	var got struct {
+		Choice struct {
+			Type  string           `json:"type"`
+			Mode  string           `json:"mode"`
+			Tools []map[string]any `json:"tools"`
+		} `json:"tool_choice"`
+		Tools []map[string]any `json:"tools"`
+	}
+	if err := json.Unmarshal(grokPluginBody(in), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Choice.Type != "allowed_tools" || got.Choice.Mode != "auto" || len(got.Choice.Tools) != 1 || got.Choice.Tools[0]["name"] != "read_file" {
+		t.Fatalf("plugin: tool_choice %+v", got.Choice)
+	}
+	if len(got.Tools) != 1 || got.Tools[0]["name"] != "read_file" {
+		t.Fatalf("plugin: tools %+v", got.Tools)
+	}
+	var builtin struct {
+		Choice struct {
+			Type string `json:"type"`
+		} `json:"tool_choice"`
+		Tools []map[string]any `json:"tools"`
+	}
+	if err := json.Unmarshal(grokBody(in), &builtin); err != nil {
+		t.Fatal(err)
+	}
+	if builtin.Choice.Type != "" {
+		t.Fatalf("built-in: tool_choice %+v", builtin.Choice)
+	}
+	if len(builtin.Tools) != 1 || builtin.Tools[0]["name"] != "read_file" {
+		t.Fatalf("built-in: tools %+v", builtin.Tools)
+	}
+}
+
 // Codex's reasoning, handed back with a null content, is sent without it.
 func TestGrokBodyDropsNullReasoningContent(t *testing.T) {
 	in := []byte(`{"input":[{"type":"reasoning","id":"rs_1","summary":[],"content":null,"encrypted_content":"a+b/c="},{"type":"message","role":"user","content":"hi"}]}`)

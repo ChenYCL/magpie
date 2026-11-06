@@ -135,7 +135,7 @@ func PublicHost() string {
 // NAS panels offer) has the host's own addresses, and they are said as
 // they are.
 func ContainerAddrs() bool {
-	return publicURL() == "" && inContainer("/") && !hostNetwork(ifaceNames())
+	return publicURL() == "" && InContainer() && !hostNetwork(ifaceNames())
 }
 
 // hostNetwork: the interfaces names are the host's, not a container's own:
@@ -175,7 +175,7 @@ var ifaceNames = func() []string {
 // not there on Linux unless a container is given it. "" when magpie is
 // not in a container, is on the host's network, or has no default route.
 func ContainerHostURL() string {
-	if !inThisContainer() || hostNetwork(ifaceNames()) {
+	if !InContainer() || hostNetwork(ifaceNames()) {
 		return ""
 	}
 	gw := defaultGateway(routeTable())
@@ -185,8 +185,6 @@ func ContainerHostURL() string {
 	return Scheme() + "://" + net.JoinHostPort(gw, Port())
 }
 
-// inThisContainer is inContainer("/"); a variable for the tests.
-var inThisContainer = func() bool { return inContainer("/") }
 
 // routeTable is Linux's IPv4 routing table; a variable for the tests.
 var routeTable = func() string {
@@ -223,7 +221,9 @@ func defaultGateway(table string) string {
 
 // InContainer: this magpie runs in a container (Docker, Podman, a
 // Kubernetes pod), whose image is what gets updated, not its binary.
-func InContainer() bool { return inContainer("/") }
+// InContainer is inContainer("/"); a variable so a test can say where the
+// binary runs.
+var InContainer = func() bool { return inContainer("/") }
 
 // inContainer: the system under root is a container's — Docker's or
 // Podman's marker file, or a container runtime in PID 1's cgroup.

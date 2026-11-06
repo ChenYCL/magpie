@@ -334,6 +334,10 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.NPMRegistry = cur.NPMRegistry // and its npm registry
 	// which Codex accounts spend a reset by themselves, set on the Usage card
 	in.CodexAutoReset = cur.CodexAutoReset
+	// and which GLM Coding Plan keys do, set on its card there
+	in.ZhipuAutoReset = cur.ZhipuAutoReset
+	// and what a model takes, said by its id (model take, the CLI's)
+	in.ModelInputs = cur.ModelInputs
 	in.CodexAutoResetOnly = cur.CodexAutoResetOnly // and at which of the two times
 	in.CodexResetLead = cur.CodexResetLead         // and how early before one expires (codex-reset-lead)
 	// and which of them spend their credits, set there too

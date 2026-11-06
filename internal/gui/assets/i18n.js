@@ -5,6 +5,9 @@
 const I18N = {
   zh: {
     "Collapse all": "全部收起",
+    "Sandbox": "沙箱",
+    "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "给不可信的操作一个专属沙箱：命令在一个全新的容器里运行，不碰这台机器",
+    "The sandbox is on": "沙箱已开启",
     "Expand all": "全部展开",
     "Found by magpie: {url}": "magpie 自动找到：{url}",
     "magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day": "magpie 在中转站常用的余额查询地址问到了这个 key 的余额，就从这里读。数额不对的话，请填上你自己的余额 URL 和字段；magpie 每天会重新找一次",
@@ -4742,6 +4745,9 @@ const I18N = {
   },
   "zh-TW": {
     "Collapse all": "全部收起",
+    "Sandbox": "沙箱",
+    "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "給不可信的操作一個專屬沙箱：命令在一個全新的容器裡執行，不碰這台機器",
+    "The sandbox is on": "沙箱已開啟",
     "Expand all": "全部展開",
     "Found by magpie: {url}": "magpie 自動找到：{url}",
     "magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day": "magpie 在中轉站常用的餘額查詢位址問到了這個 key 的餘額，就從這裡讀。數額不對的話，請填上你自己的餘額 URL 和欄位；magpie 每天會重新找一次",
@@ -9464,6 +9470,9 @@ const I18N = {
   },
   ja: {
     "Collapse all": "すべて折りたたむ",
+    "Sandbox": "サンドボックス",
+    "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "信頼できない作業のための専用サンドボックス：コマンドは新しいコンテナで実行され、このマシンには触れない",
+    "The sandbox is on": "サンドボックスは有効",
     "Expand all": "すべて展開",
     "Found by magpie: {url}": "magpie が自動で見つけました：{url}",
     "magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day": "magpie はリレーが残高を返す一般的な場所でこのキーの残高を見つけ、ここから読んでいます。金額が違う場合は、残高 URL とフィールドを自分で入力してください。magpie は毎日探し直します",
@@ -14190,6 +14199,9 @@ const I18N = {
   },
   de: {
     "Collapse all": "Alle einklappen",
+    "Sandbox": "Sandbox",
+    "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "Ein eigener Sandkasten für nicht vertrauenswürdige Arbeit: ein Befehl läuft in einem frischen Container, nicht auf diesem Rechner",
+    "The sandbox is on": "Der Sandkasten ist an",
     "Expand all": "Alle ausklappen",
     "Found by magpie: {url}": "Von magpie gefunden: {url}",
     "magpie asked this relay where relays tell a key its balance, and reads it here. If the amount is wrong, put in your own Balance URL and field; magpie looks again each day": "magpie hat das Guthaben dieses Schlüssels dort gefunden, wo Relays es üblicherweise angeben, und liest es hier. Stimmt der Betrag nicht, trage eigene Guthaben-URL und -Feld ein; magpie sucht jeden Tag neu",

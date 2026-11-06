@@ -145,6 +145,13 @@ func TestBootSaysBuiltinsOff(t *testing.T) {
 // find, never this process's guess.
 func TestBootSaysWhereItsGatewayListens(t *testing.T) {
 	h := builtinHome(t)
+	// a runner in a container (a dev's, not a CI machine's) would have boot
+	// say the Docker bridge beside the LAN addresses, and the lines below
+	// hold their exact words: this test is about where it listens, not
+	// what a container adds (lan_test's TestContainerHostURL covers that)
+	in := gateway.InContainer
+	gateway.InContainer = func() bool { return false }
+	t.Cleanup(func() { gateway.InContainer = in })
 	t.Setenv("MAGPIE_ADDR", "127.0.0.1:3481")
 	boot := func() string {
 		rec := httptest.NewRecorder()

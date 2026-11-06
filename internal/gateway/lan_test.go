@@ -441,11 +441,11 @@ func TestDefaultGateway(t *testing.T) {
 	// in a container it is offered on the gateway's port; on the host's
 	// network, where the addresses are the host's own, it is not
 	t.Cleanup(func(rt func() string, ifn func() []string, in func() bool) func() {
-		return func() { routeTable, ifaceNames, inThisContainer = rt, ifn, in }
-	}(routeTable, ifaceNames, inThisContainer))
+		return func() { routeTable, ifaceNames, InContainer = rt, ifn, in }
+	}(routeTable, ifaceNames, InContainer))
 	routeTable = func() string { return docker }
 	ifaceNames = func() []string { return []string{"lo", "eth0"} }
-	inThisContainer = func() bool { return true }
+	InContainer = func() bool { return true }
 	if got, want := ContainerHostURL(), Scheme()+"://172.17.0.1:"+Port(); got != want {
 		t.Errorf("in a container: %q, want %q", got, want)
 	}
@@ -454,7 +454,7 @@ func TestDefaultGateway(t *testing.T) {
 		t.Errorf("on the host's network: %q, want none", got)
 	}
 	ifaceNames = func() []string { return []string{"lo", "eth0"} }
-	inThisContainer = func() bool { return false }
+	InContainer = func() bool { return false }
 	if got := ContainerHostURL(); got != "" {
 		t.Errorf("not in a container: %q, want none", got)
 	}

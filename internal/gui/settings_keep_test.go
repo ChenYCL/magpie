@@ -174,6 +174,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CodexAutoReset:       []string{"me@example.com"},
 		CodexAutoResetOnly:   map[string]string{"me@example.com": "expiring"},
 		ZhipuAutoReset:       []string{"zai-codingplan"},
+		ModelInputs:          map[string][]string{"fake/q1": {"text"}},
 		CodexResetLead:       180,
 		CodexNoCredits:       []string{"me@example.com"},
 		CodexCreditsLast:     []string{"two@example.com"},

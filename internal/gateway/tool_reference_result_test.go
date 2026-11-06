@@ -234,3 +234,118 @@ func TestRefsSaidLeavesOtherResults(t *testing.T) {
 		t.Errorf("two references went as %s", got)
 	}
 }
+
+// bridgeVendor answers as nas-cqudjq's bridge does (2026-11-06): a
+// tool_reference at a message's top level is taken, one inside a
+// tool_result is "Unexpected item type in content." — the refusal names
+// neither a variant nor a missing field, and it comes whether or not a
+// text block sits beside the reference.
+type bridgeVendor struct {
+	mu     sync.Mutex
+	bodies []string
+}
+
+func (v *bridgeVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	b, _ := io.ReadAll(r.Body)
+	v.mu.Lock()
+	v.bodies = append(v.bodies, string(b))
+	v.mu.Unlock()
+	var m struct {
+		Messages []struct {
+			Content []struct {
+				Type    string `json:"type"`
+				Content []struct {
+					Type string `json:"type"`
+				} `json:"content"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	json.Unmarshal(b, &m)
+	refused := false
+	for _, msg := range m.Messages {
+		for _, bl := range msg.Content {
+			if bl.Type != "tool_result" {
+				continue
+			}
+			for _, c := range bl.Content {
+				refused = refused || c.Type == "tool_reference"
+			}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if refused {
+		w.WriteHeader(400)
+		io.WriteString(w, `{"type":"error","error":{"type":"BadRequestError","message":"Unexpected item type in content."}}`)
+		return
+	}
+	io.WriteString(w, `{"id":"msg_1","type":"message","role":"assistant","model":"q","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`)
+}
+
+func (v *bridgeVendor) sent() []string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return append([]string(nil), v.bodies...)
+}
+
+// A bridge that takes a top-level tool_reference and refuses one in a
+// tool_result is learned from its own words: the reference goes as the
+// text that says the tool is loaded, the result's other content and the
+// tool_use pairing stay, and from then on no request carries one there.
+func TestBridgeRefusingResultRefsIsLearned(t *testing.T) {
+	fresh(t)
+	bv := &bridgeVendor{}
+	srv := httptest.NewServer(bv)
+	t.Cleanup(srv.Close)
+	if err := provider.Save(provider.Provider{ID: "nas", Name: "NAS", Key: "k", Anthropic: srv.URL,
+		Models: []string{"q"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := New().Handler()
+	post := func(body string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)))
+		if rec.Code != 200 {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body)
+		}
+	}
+	// the reference alone, then beside text: both refused until learned
+	post(reporterRefsOnly("nas/q"))
+	post(`{"model":"nas/q","max_tokens":8,"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":[{"type":"text","text":"ran"},{"type":"tool_reference","tool_name":"check"}]}]}]}`)
+	// the first ask is refused and its retry reshaped; the second request
+	// goes reshaped from the start (the refusal was learned)
+	sent := bv.sent()
+	if len(sent) != 3 {
+		t.Fatalf("the bridge was asked %d times, want the refusal once, its retry, and the second request as learned: %q", len(sent), sent)
+	}
+	if !strings.Contains(sent[0], `"tool_reference"`) {
+		t.Fatalf("the first ask came already reshaped: %q", sent[0])
+	}
+	for _, got := range sent[1:] {
+		if strings.Contains(got, `"type":"tool_reference"`) || strings.Contains(got, `"type": "tool_reference"`) {
+			t.Fatalf("a reference inside a tool_result survived: %s", got)
+		}
+	}
+	if !strings.Contains(sent[1], "Tool check is loaded and can be called now.") {
+		t.Fatalf("the retry didn't say the tool is loaded: %s", sent[1])
+	}
+	if !strings.Contains(sent[1], `"tool_use_id":"toolu_direct_probe"`) {
+		t.Fatalf("the retry lost the result's pairing: %s", sent[1])
+	}
+	if !strings.Contains(sent[2], "ran") || !strings.Contains(sent[2], `"tool_use_id":"t"`) {
+		t.Fatalf("the second request lost its text or pairing: %s", sent[2])
+	}
+	// learned: a fresh conversation goes without one from the start
+	post(reporterRefsOnly("nas/q"))
+	if got := bv.sent(); len(got) != 4 || strings.Contains(got[3], `"tool_reference"`) {
+		t.Fatalf("after the refusal the bridge was sent %q", got[3])
+	}
+}
+
+// A top-level tool_reference is none of this shape's business.
+func TestResultRefsLeavesTopLevelRefs(t *testing.T) {
+	body := `{"messages":[{"role":"user","content":[{"type":"tool_reference","tool_name":"check"},{"type":"text","text":"ok"}]}]}`
+	if got := string(withoutResultRefs([]byte(body))); got != body {
+		t.Errorf("top-level reference went as %s", got)
+	}
+}

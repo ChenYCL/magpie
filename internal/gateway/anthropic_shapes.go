@@ -81,6 +81,7 @@ const (
 	shapeSafeguards = "shape:safeguards"
 	shapeDeferred   = "shape:messages[].content[].tool_addition"
 	shapeRefsOnly   = "shape:tool_result.content=tool_reference"
+	shapeResultRefs = "shape:tool_result.content[] holds tool_reference"
 )
 
 var (
@@ -91,6 +92,7 @@ var (
 	safeguardsRefused   = regexp.MustCompile(`\bsafeguards:? Extra inputs are not permitted`)
 	deferredRefused     = regexp.MustCompile("messages\\[\\d+\\]\\.content: unknown variant `(?:tool_addition|tool_removal|tool_definition|tool_reference)`")
 	refsOnlyRefused     = regexp.MustCompile("missing field `content`")
+	itemTypeRefused     = regexp.MustCompile(`Unexpected item type in content`)
 )
 
 // knownDisplay is a thinking.display every Anthropic endpoint has taken.
@@ -126,6 +128,13 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 	if refsOnlyRefused.Match(errBody) && hasRefsOnlyResult(body) {
 		mark(shapeRefsOnly)
 	}
+	// a bridge that reads a tool_result's content and names no block: it
+	// refused an item it can't read, and the one it is ever sent that
+	// Anthropic's own endpoint takes is a tool_reference (a bridge reads
+	// a top-level one fine, so the refusal is about this one)
+	if itemTypeRefused.Match(errBody) && hasResultRefs(body) {
+		mark(shapeResultRefs)
+	}
 	// a role refused at a message that is a system one, counted in the
 	// messages as they were sent; a refusal naming a user or assistant
 	// message is over something else
@@ -146,6 +155,12 @@ func (s *Server) withoutRefusedShapes(p provider.Provider, body []byte) []byte {
 	}
 	if !s.fits(p.ID, shapeRefsOnly, provider.Anthropic) {
 		body = withRefsSaid(body)
+	}
+	// a bridge that takes a top-level tool_reference but not one inside a
+	// tool_result (nas-cqudjq's, 2026-11-06): the reference is said as the
+	// text that says the tool is loaded, and left out
+	if !s.fits(p.ID, shapeResultRefs, provider.Anthropic) {
+		body = withoutResultRefs(body)
 	}
 	if !s.fits(p.ID, shapeTurnSystem, provider.Anthropic) {
 		body = withSystemOnTop(body)
@@ -517,6 +532,117 @@ func refsOnly(c gjson.Result) bool {
 		return only
 	})
 	return only
+}
+
+// hasResultRefs is a request with a tool_reference inside any tool_result's
+// content, mixed with text or not: the shape a bridge refuses while it
+// takes the same reference at a message's top level.
+func hasResultRefs(body []byte) bool {
+	if !bytes.Contains(body, []byte(`"tool_reference"`)) {
+		return false
+	}
+	found := false
+	getIn(body, "messages").ForEach(func(_, m gjson.Result) bool {
+		m.Get("content").ForEach(func(_, b gjson.Result) bool {
+			if b.Get("type").String() != "tool_result" || !b.Get("content").IsArray() {
+				return true
+			}
+			b.Get("content").ForEach(func(_, item gjson.Result) bool {
+				found = item.Get("type").String() == "tool_reference"
+				return !found
+			})
+			return !found
+		})
+		return !found
+	})
+	return found
+}
+
+// withoutResultRefs is body with each tool_reference inside a tool_result
+// said as the text that says the tool is loaded, instead of the block: a
+// bridge reads a top-level reference and not one in a result (nas-cqudjq's,
+// 2026-11-06). One already beside such a text isn't said twice.
+func withoutResultRefs(body []byte) []byte {
+	if !hasResultRefs(body) {
+		return body
+	}
+	var v struct {
+		Messages []json.RawMessage `json:"messages"`
+	}
+	if json.Unmarshal(body, &v) != nil {
+		return body
+	}
+	out := make([]json.RawMessage, 0, len(v.Messages))
+	for _, raw := range v.Messages {
+		c := gjson.GetBytes(raw, "content")
+		if !c.IsArray() {
+			out = append(out, raw)
+			continue
+		}
+		blocks := make([]json.RawMessage, 0, len(c.Array()))
+		changed := false
+		for _, b := range c.Array() {
+			if b.Get("type").String() != "tool_result" || !b.Get("content").IsArray() {
+				blocks = append(blocks, json.RawMessage(b.Raw))
+				continue
+			}
+			var m map[string]json.RawMessage
+			if json.Unmarshal([]byte(b.Raw), &m) != nil {
+				return body
+			}
+			var items []json.RawMessage
+			saw := false
+			for _, item := range b.Get("content").Array() {
+				if item.Get("type").String() != "tool_reference" {
+					items = append(items, json.RawMessage(item.Raw))
+					continue
+				}
+				name := item.Get("tool_name").String()
+				if name != "" && !saw {
+					text, err := marshalPlain(map[string]string{"type": "text", "text": toolLoadedText(name)})
+					if err != nil {
+						return body
+					}
+					items = append(items, text)
+					saw = true
+				}
+				changed = true
+			}
+			if !saw {
+				blocks = append(blocks, json.RawMessage(b.Raw))
+				continue
+			}
+			cb, err := marshalPlain(items)
+			if err != nil {
+				return body
+			}
+			m["content"] = cb
+			nb, err := marshalPlain(m)
+			if err != nil {
+				return body
+			}
+			blocks = append(blocks, nb)
+		}
+		if !changed {
+			out = append(out, raw)
+			continue
+		}
+		var m map[string]json.RawMessage
+		if json.Unmarshal(raw, &m) != nil {
+			return body
+		}
+		cb, err := marshalPlain(blocks)
+		if err != nil {
+			return body
+		}
+		m["content"] = cb
+		nb, err := marshalPlain(m)
+		if err != nil {
+			return body
+		}
+		out = append(out, nb)
+	}
+	return withFields(body, map[string]any{"messages": out})
 }
 
 // hasRefsOnlyResult is a request with a tool_result holding only

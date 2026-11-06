@@ -230,6 +230,17 @@ type Provider struct {
 	// fitting, which a backend that isn't OpenAI's needs (#350).
 	CodexAsSent bool `json:"codexAsSent,omitempty"`
 
+	// PromptAsWritten, on Antigravity's subscription, has the system prompt
+	// go to Google exactly as the agent wrote it. By default the few lines
+	// Google answers with a 429 "Resource has been exhausted" whatever
+	// quota is left (Claude Code's billing line, the Claude Agent SDK's
+	// identity line, Codex's GPT-5 identity lines, Hermes Agent's earlier
+	// default persona) go with a zero-width space inside them, which Google
+	// lets through and the model reads the same (gateway's
+	// antigravityCloak). Set with `magpie provider set antigravity
+	// prompt=as-written`; prompt=default turns it back.
+	PromptAsWritten bool `json:"promptAsWritten,omitempty"`
+
 	// AdditionalTools says the provider's Responses API takes an
 	// additional_tools input item, as OpenAI's does: a deferred tool an
 	// Anthropic client's tool search loaded goes to it in such an item

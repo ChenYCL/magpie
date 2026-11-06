@@ -11836,6 +11836,47 @@ function renderModels(p) {
         drawReset();
       };
       row.append(img);
+      // what it takes: its vendor's kinds, or the ones the user says
+      // (provider.SetModelInputs), for a box whose list names the model
+      // and nothing of what it reads — a Qwen that takes video showed as
+      // text alone. One pill, ticked as a menu, as the APIs beside it are
+      const INPUT_KINDS = [["text", "Text"], ["image", "Images"], ["audio", "Audio"], ["video", "Video"], ["pdf", "PDF"]];
+      // staged as an array: [] is its vendor's kinds again, which is what
+      // unticking every one of them means (provider.SetModelInputs's nil)
+      const inputsNow = () => {
+        const said = prefs[id]?.inputs;
+        if (said === undefined) return m.inputs ?? [];
+        return said.length ? said : m.ownInputs || [];
+      };
+      const inputsSaid = () => prefs[id]?.inputs ? prefs[id].inputs.length > 0 : !!m.inputsSet;
+      const tastePill = el("button", "take-pill", "");
+      tastePill.type = "button";
+      const drawTaste = () => {
+        const on = inputsNow();
+        const said = inputsSaid();
+        tastePill.textContent = on.length ? on.map((k) => t((INPUT_KINDS.find(([v]) => v === k) || [])[1] || k)).join(" · ") : t("Text");
+        tastePill.classList.toggle("said", said);
+        tastePill.title = said
+          ? t("What {id} takes, as you said it. Its vendor's list says {own}", { id: m.id, own: (m.ownInputs || ["text"]).join(", ") })
+          : t("What {id} takes, as its vendor's list says. Say it yourself for a box whose list names the model and nothing else", { id: m.id });
+      };
+      tastePill.onclick = (e) => {
+        e.stopPropagation();
+        if (tastePill.classList.contains("open")) return closeProtoMenu();
+        const on = inputsNow();
+        const opts = INPUT_KINDS.map(([v, label]) => ({ v, name: t(label) }));
+        if (inputsSaid()) opts.unshift({ v: "", name: t("Its vendor's list"), always: true });
+        openProtoMenu(tastePill, opts, [...on], (picked) => {
+          // untick every one of them: its vendor's kinds again, which the
+          // save takes as SetModelInputs's nil
+          const order = INPUT_KINDS.map(([v]) => v).filter((v) => picked.includes(v));
+          pref().inputs = order;
+          drawTaste();
+          drawReset();
+        }, t("What it takes"), "sess-menu mname-menu", "left", false);
+      };
+      drawTaste();
+      row.append(tastePill);
       const apiNow = () => prefs[id]?.api ?? m.api ?? "";
       let apiSeg = null;
       if (apis.length || m.api) {
@@ -11896,7 +11937,7 @@ function renderModels(p) {
       const unsaved = el("span", "hint munsaved", t("unsaved"));
       unsaved.title = t("Made when the provider is saved; Cancel drops it");
       const reset = el("button", "text action", t("Restore default"));
-      reset.title = t("Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, and its list price");
+      reset.title = t("Its own name, every reasoning level it has, whether it sees images, what it takes, the API it is asked on, the model it is the same as, its own id, and its list price");
       reset.onclick = () => {
         prefs[id] = {};
         if (draft.priceTyped) delete draft.priceTyped[id];
@@ -11904,8 +11945,10 @@ function renderModels(p) {
         if (m.kept?.length) prefs[id].efforts = [];
         if (m.reasonless) prefs[id].reasonless = false;
         if (m.imageSet) prefs[id].ownImages = true;
+        if (m.inputsSet) prefs[id].inputs = [];
         name.value = nameNow();
         imgCb.checked = imagesNow();
+        drawTaste();
         for (const [l, cb] of boxes) cb.checked = keptNow().includes(l);
         drawNone();
         if (m.api) prefs[id].api = "";
@@ -11924,7 +11967,7 @@ function renderModels(p) {
         unsaved.hidden = !prefs[id] && !draft.priceTyped?.[id];
         // staged back to its own already, there is nothing to restore
         const images = prefs[id]?.ownImages ? false : prefs[id]?.images !== undefined ? prefs[id].images !== !!m.ownImages : !!m.imageSet;
-        const custom = nameNow() !== "" || noneNow() || (prefs[id]?.efforts ? prefs[id].efforts.length > 0 : !!m.kept?.length) || images || apiNow() !== "" || sameNow() !== "" || idNow() !== "" || priceNow() !== null || !!draft.priceTyped?.[id];
+        const custom = nameNow() !== "" || noneNow() || (prefs[id]?.efforts ? prefs[id].efforts.length > 0 : !!m.kept?.length) || images || !!prefs[id]?.inputs?.length || apiNow() !== "" || sameNow() !== "" || idNow() !== "" || priceNow() !== null || !!draft.priceTyped?.[id];
         reset.hidden = !custom;
       };
       row.append(unsaved, reset);

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/yetone/magpie/internal/filememo"
@@ -43,6 +44,7 @@ func TestProviderListReadsSettingsOnce(t *testing.T) {
 	raw, err := json.Marshal(map[string]any{
 		"modelImages":  images,
 		"modelOutputs": map[string]int{"relay/model-9": 64000},
+		"modelInputs":  map[string][]string{"relay/model-11": {"text", "image", "video"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -81,5 +83,13 @@ func TestProviderListReadsSettingsOnce(t *testing.T) {
 	}
 	if m := byID["model-9"]; m.Output != 64000 {
 		t.Errorf("the user's reply limit is lost: %+v", m)
+	}
+	// what the user said it takes, and what its vendor listed, which a
+	// staged Restore default goes back to
+	if m := byID["model-11"]; !m.InputsSet || !slices.Contains(m.Inputs, "video") {
+		t.Errorf("what the user said it takes is lost: %+v", m)
+	}
+	if m := byID["model-12"]; m.InputsSet {
+		t.Errorf("a say about kinds nobody gave: %+v", m)
 	}
 }

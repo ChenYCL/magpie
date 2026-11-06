@@ -3592,6 +3592,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
    row in a phone-wide editor (Kayphoon: a Gemini URL's beside the others),
    the box growing with them rather than the last one hanging out of it */
 .mname .mapi { flex: none; min-height: 24px; font-size: 11px; }
+/* what a model takes: a pill that opens the kinds like the APIs beside it
+   (Kayphoon: a vLLM box's list names the model and nothing of what it reads,
+   so a Qwen that takes video was offered as text alone) */
+.mname .take-pill { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 8px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 6px; background: none; box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; cursor: pointer; }
+.mname .take-pill:hover { color: var(--fg); }
+.mname .take-pill.said { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .mname .msame { display: flex; align-items: center; gap: 6px; flex: 0 1 230px; min-width: 0; font-size: 11.5px; color: var(--muted); }
 .mname .msame span { flex: none; }
 .mname .msame input { flex: 1; min-width: 0; height: 25px; font-size: 11.5px; }

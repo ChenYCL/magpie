@@ -40,20 +40,26 @@ type modelJSON struct {
 	Given   bool     `json:"given,omitempty"` // its levels aren't known: Efforts are those it can be given, Kept those it was
 	// Reasonless: the user said it takes no reasoning ask
 	// (provider.SetModelReasonless): none of Efforts is kept, and none is sent
-	Reasonless bool    `json:"reasonless,omitempty"`
-	Images     bool    `json:"images"`              // agents are told it can see images
-	ImageSet   bool    `json:"imageSet,omitempty"`  // the user said so, rather than its vendor
-	Own        bool    `json:"ownImages,omitempty"` // its vendor's answer, which a staged Restore default shows
-	On         bool    `json:"on"`                  // exposed to agents
-	Best       bool    `json:"best,omitempty"`      // the newest of its family in the list: what Best in family serves (provider.NewestInFamily)
-	Context    int     `json:"context,omitempty"`   // the window agents are told: the user's, else Listed
-	Output     int     `json:"output,omitempty"`    // the reply limit agents are told: provider.ReplyLimit within Context (provider.OutputWithin)
-	Listed     int     `json:"listed,omitempty"`    // its window before the user's: its vendor's list's, else models.dev's
-	Max        int     `json:"max,omitempty"`       // the most its context may be set to, above Listed
-	Free       bool    `json:"free,omitempty"`      // costs the subscription nothing
-	Zero       bool    `json:"zero,omitempty"`      // listed at $0 on this provider (provider.PricedFree), where Free is the vendor's word
-	Rate       float64 `json:"rate,omitempty"`      // the credits a request costs the subscription, as a multiple
-	RateWas    float64 `json:"rateWas,omitempty"`   // the rate before a discount running now
+	Reasonless bool `json:"reasonless,omitempty"`
+	Images     bool `json:"images"`              // agents are told it can see images
+	ImageSet   bool `json:"imageSet,omitempty"`  // the user said so, rather than its vendor
+	Own        bool `json:"ownImages,omitempty"` // its vendor's answer, which a staged Restore default shows
+	// Inputs is what the model takes, as the user said it (ModelInputs);
+	// InputsSet says they said it, and OwnInputs what its vendor lists,
+	// which a staged Restore default goes back to
+	Inputs    []string `json:"inputs,omitempty"`
+	InputsSet bool     `json:"inputsSet,omitempty"`
+	OwnInputs []string `json:"ownInputs,omitempty"`
+	On        bool     `json:"on"`                // exposed to agents
+	Best      bool     `json:"best,omitempty"`    // the newest of its family in the list: what Best in family serves (provider.NewestInFamily)
+	Context   int      `json:"context,omitempty"` // the window agents are told: the user's, else Listed
+	Output    int      `json:"output,omitempty"`  // the reply limit agents are told: provider.ReplyLimit within Context (provider.OutputWithin)
+	Listed    int      `json:"listed,omitempty"`  // its window before the user's: its vendor's list's, else models.dev's
+	Max       int      `json:"max,omitempty"`     // the most its context may be set to, above Listed
+	Free      bool     `json:"free,omitempty"`    // costs the subscription nothing
+	Zero      bool     `json:"zero,omitempty"`    // listed at $0 on this provider (provider.PricedFree), where Free is the vendor's word
+	Rate      float64  `json:"rate,omitempty"`    // the credits a request costs the subscription, as a multiple
+	RateWas   float64  `json:"rateWas,omitempty"` // the rate before a discount running now
 	// Load is how busy its plugin last said the model is, a percent, when
 	// that was within plugin.LoadFresh (magpie.load); nil when unknown
 	Load  *float64 `json:"load,omitempty"`
@@ -917,7 +923,14 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			images = said
 		}
 		window := p.WindowOf(m)
-		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID]}
+		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID], OwnInputs: m.InputModalities}
+		// and what it takes, the user's say standing in for its vendor's
+		// kinds as Images does for seeing (provider.SetModelInputs)
+		if said, ok := set.ModelInputs[p.ID+"/"+m.ID]; ok {
+			j.Inputs, j.InputsSet = said, true
+		} else {
+			j.Inputs = j.OwnInputs
+		}
 		j.Zero = !m.Free && p.PricedFree(set, m.ID)
 		// a plugin reports a model's load by its own id, not one the user
 		// lists it by (axelburks on Discord)

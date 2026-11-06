@@ -596,6 +596,10 @@ type ModelPref struct {
 	Same       *string        `json:"same,omitempty"`
 	Price      *catalog.Price `json:"price,omitempty"`
 	OwnPrice   bool           `json:"ownPrice,omitempty"`
+	// Inputs is what the model takes, as SetModelInputs takes it: left out
+	// is as it was, [] the vendor's list's kinds again, and any other list
+	// the user's say in place of them
+	Inputs *[]string `json:"inputs,omitempty"`
 	// Kind is what the model makes, as SetModelKind takes it: "image",
 	// "video", or "" for what its vendor's list and name say (#1399)
 	Kind *string `json:"kind,omitempty"`
@@ -640,6 +644,17 @@ func SetModelPrefs(pid string, prefs map[string]ModelPref) error {
 					images = nil
 				}
 				if err := set(setModelImage(ref, images)); err != nil {
+					return err
+				}
+			}
+			// what it takes, said by the editor's Kinds row: an empty
+			// list is its vendor's kinds again (setModelInputs's nil)
+			if m.Inputs != nil {
+				kinds := *m.Inputs
+				if len(kinds) == 0 {
+					kinds = nil
+				}
+				if err := set(setModelInputs(ref, kinds)); err != nil {
 					return err
 				}
 			}

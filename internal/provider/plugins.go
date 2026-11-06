@@ -947,6 +947,8 @@ func (p Provider) Do(client *http.Client, req *http.Request) (*http.Response, er
 		req = req.Clone(netproxy.With(req.Context(), choice))
 		res, err := p.do(client, req)
 		done(res, err)
+		return res, err
+	}
 	if ctx := req.Context(); probelog.Pending(ctx) {
 		start := time.Now()
 		req = req.WithContext(probelog.Taken(ctx))

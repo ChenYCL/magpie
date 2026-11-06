@@ -33,7 +33,7 @@ const SandboxMCPPath = "/mcp/magpie/sandbox"
 const sandboxMCPBody = 1 << 20
 
 func (s *Server) sandboxMCP(w http.ResponseWriter, r *http.Request) {
-	serveMCP(w, r, "magpie's sandbox", sandboxMCPBody, s.sandboxMCPCall)
+	serveMCP(w, r, "magpie's sandbox", "magpie-sandbox", 1<<20, s.sandboxMCPCall)
 }
 
 type sandboxTool struct {

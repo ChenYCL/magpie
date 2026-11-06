@@ -7315,10 +7315,22 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 	var beforeOff *Request
 	var toolsRefusal []byte
 	offAsked := false
-	// the reply limit was filled in, the client having named none
-	// (fillsOutput)
-	filledOutput := false
 	for {
+		wire := provider.UpstreamNameIn(wires, p.ID, model)
+		sent := req
+		if dropsBillingLine(p, to, model, wire) && billingHeader.MatchString(req.System) {
+			// Claude Code's billing line, which changes every turn, as the
+			// first words of another API's prompt or a vendor's model's:
+			// its prompt cache missed from the first byte (#1600,
+			// billing_line.go)
+			r := *req
+			r.System, sent = withoutBillingHeader(r.System), &r
+		}
+		body, err := buildFor(p, to, sent, model)
+		if err != nil {
+			return nil, to, err
+		}
+		noteWireEffort(ctx, to, sent)
 		if req.hourMarks && !s.fits(p.ID, hourMarksRefused, to) {
 			r := *req
 			r.hourMarks, req = false, &r

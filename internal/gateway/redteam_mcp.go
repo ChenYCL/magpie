@@ -49,7 +49,7 @@ var redteamStore = func() (*redteamstore.DB, error) {
 }
 
 func (s *Server) redteamMCP(w http.ResponseWriter, r *http.Request) {
-	serveMCP(w, r, "magpie's red team store", redteamMCPBody, s.redteamMCPCall)
+	serveMCP(w, r, "magpie's red team store", "magpie-redteam", 1<<20, s.redteamMCPCall)
 }
 
 func (s *Server) redteamMCPCall(r *http.Request, m mcpMessage) (any, map[string]any) {

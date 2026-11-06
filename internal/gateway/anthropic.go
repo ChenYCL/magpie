@@ -759,8 +759,60 @@ func AdaptiveThinking(model string) bool { return adaptiveOnly(model) }
 // effortInOutputConfig is a model that takes how hard it thinks from
 // output_config.effort, beside thinking turned on, as ZCode asks it: Z.ai's
 // GLM-5.2 and GLM-5.3 on their Anthropic endpoints. A budget alone leaves
-// them at their own default.
-var effortInOutputConfig = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])`)
+// them at their own default. MiniMax's MiniMax-M3.1-Flash and its
+// -Preview, which think at low…max (MiniMax Code's catalog: forced_on),
+// are asked the same way as MiniMax Code asks them: a budget alone gave
+// medium to max one budget under an 8192 cap, so the level was lost
+// (shin4 on plugins#316).
+//
+// GPT models are asked so too, on whatever Messages endpoint serves them (a
+// relay the user set up): a relay that maps Messages onto OpenAI reads the
+// level from output_config.effort, and a budget alone left every request at
+// its default, medium (zxz8009195489 on Discord, 2026-11-04).
+var effortInOutputConfig = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])|minimax-m3\.1-flash(?:$|[-.:/\[])|(?:^|[^a-z0-9])gpt-\d`)
+
+// deepseekHost is DeepSeek's own API, whose Anthropic endpoint
+// (api.deepseek.com/anthropic) takes the effort in output_config.
+const deepseekHost = provider.DeepSeekHost
+
+// isDeepSeekAnthropic is whether the request goes to DeepSeek's own
+// Anthropic endpoint, whose shape is checked against the host, not the
+// preset: a "deepseek" provider pointed at another host is that host's
+// shape, and it learns from that endpoint's refusals as any other does.
+func isDeepSeekAnthropic(p provider.Provider, to provider.Protocol) bool {
+	return provider.HostOf(p.Base(to)) == deepseekHost
+}
+
+// deepseekEfforts are the levels DeepSeek's models think at: its thinking
+// guide maps minimal to low, medium and xhigh to high, and ultra to max.
+// A budget a client sent is fitted to them when the model's own list is
+// unknown, so 32000 (max, as budgetOf gives it) asks max, not xhigh,
+// which DeepSeek would read as high.
+var deepseekEfforts = []string{"low", "high", "max"}
+
+// outputEffortAt is effortInOutputConfig for a model at host: those
+// models anywhere, and every model on DeepSeek's own endpoint. DeepSeek's
+// Anthropic API docs (api-docs.deepseek.com/guides/anthropic_api, read
+// 2026-10-23) list thinking as "Supported (budget_tokens is ignored)" and
+// output_config as "Only effort is supported", and its thinking guide
+// (guides/thinking_mode) names output_config.effort as the Anthropic
+// format's effort control: a budget alone left DSH's low and max at
+// DeepSeek's default, high (#3298). Another host serving a DeepSeek model
+// is not covered by those docs and goes as it did.
+func outputEffortAt(host, model string) bool {
+	return host == deepseekHost || effortInOutputConfig.MatchString(model)
+}
+
+// AdaptiveWithEffort is, for agents told how to ask a model, one of
+// effortInOutputConfig's that takes thinking adaptive with its level in
+// output_config.effort: Z.ai's GLM-5.2 and GLM-5.3 (tried live on GLM-5.3,
+// 10-24: max thought about three times high's). An agent whose budget
+// can't say max (pi-ai clamps it to high's) asks them so. MiniMax's
+// M3.1-Flash isn't, until it is tried (#3496).
+func AdaptiveWithEffort(model string) bool { return glmOutputEffort.MatchString(model) }
+
+// glmOutputEffort is effortInOutputConfig's Z.ai half.
+var glmOutputEffort = regexp.MustCompile(`(?i)glm-5\.[23](?:$|[-.:/\[])`)
 
 // withOutputEffort is body asking, in output_config.effort, for the level
 // of levels nearest the reasoning it asks for; body when it asks for none.

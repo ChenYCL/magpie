@@ -3883,10 +3883,19 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// shapes a provider refused are taken out, as it asks a display
 		body = adaptiveThinking(body)
 		body = s.withoutRefusedShapes(p, body)
-		if isKimi(p, to) || p.IsOpenCode() && strings.Contains(strings.ToLower(modelOf(body)), "deepseek") {
+		// the thinking blocks it refused as another conversation's
+		// (thinking_bound.go), every route to it alike
+		body = s.withoutRefusedThinking(p, body)
+		// and those another vendor signed, to Claude (thinking_bound.go)
+		body = withoutForeignThinking(p, body)
+		if isKimi(p, to) || isDeepSeekAnthropic(p, to) || p.IsOpenCode() && strings.Contains(strings.ToLower(modelOf(body)), "deepseek") {
 			// Claude Code's deferred-tool blocks, for which Kimi's
 			// Anthropic endpoint turns the whole request away with a 400
-			// that names nothing to learn from (#2042). OpenCode's
+			// that names nothing to learn from (#2042). DeepSeek's own
+			// Anthropic endpoint now takes a tool_addition at no position
+			// it can appear in (#5404, a 2026-11-05 check against
+			// api.deepseek.com), so its blocks come out up front too,
+			// not after a refusal taught it. OpenCode's
 			// DeepSeek route hides the refusal behind a 422 "Endpoint
 			// is unavailable."; other OpenCode models keep their blocks.
 			body = withoutDeferredTools(body)

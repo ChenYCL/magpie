@@ -1017,6 +1017,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	// answered 404 while presets.json still held the user's say
 	presetsRoutes(mux)
 	poolRoutes(mux)
+	// the gateway plugins' API: the presets page's plugin section reads it,
+	// and the merge left it defined and never called (404 on that section)
+	gatewayPluginRoutes(mux)
 	sandboxRoutes(mux)
 	devRoutes(mux)
 	pluginPageRoutes(mux, isWeb(w))

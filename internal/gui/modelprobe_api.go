@@ -23,10 +23,22 @@ func modelProbeRoutes(mux *http.ServeMux) {
 			fail(rw, err)
 			return
 		}
+		last := modelprobe.Last()
+		// which routing groups carry each id, and the order their members
+		// fall back through: an id two groups carry, and a group whose
+		// members answer differently, is the whole difference between "the
+		// id works" and "a request for it lands"
+		routes := map[string][]modelprobe.Route{}
+		for _, row := range last.Rows {
+			if rs := modelprobe.RoutesFor(row.ID); len(rs) > 0 {
+				routes[row.ID] = rs
+			}
+		}
 		out := map[string]any{
 			"plan":    p,
 			"every":   p.EveryDuration().String(),
-			"results": modelprobe.Last(),
+			"results": last,
+			"routes":  routes,
 			// what a manual run may pick from: every exposed id, and the
 			// providers serving it
 			"ids": modelprobe.Exposed(),

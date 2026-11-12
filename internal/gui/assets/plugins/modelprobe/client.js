@@ -12,6 +12,7 @@ magpie.plugin("modelprobe", (ctx) => {
   let err = "";
   let busy = false;    // a manual run is on
   let open = new Set();// ids whose providers are shown
+  let routes = {};     // id → the routing groups carrying it, in order
   let filter = "";     // only ids containing this
   let onlyFail = false;
   let picked = new Set();// ids picked for a run of several
@@ -35,6 +36,7 @@ magpie.plugin("modelprobe", (ctx) => {
     err = "";
     try {
       state = await api("model-probe");
+      routes = state.routes || {};
       if (!draft || !quiet) draft = { ...state.plan };
     } catch (e) {
       err = String(e.message || e);
@@ -236,6 +238,8 @@ magpie.plugin("modelprobe", (ctx) => {
     }
     if (open.has(r.id)) {
       const inner = el("div", "mp-providers");
+      // the channels: one line each, ✓ or the vendor's words
+      inner.append(el("div", "mp-sect", t("Channels")));
       for (const p of r.providers) {
         const line = el("div", "mp-p" + (p.ok ? "" : " down"));
         line.append(el("span", "mp-pname", p.name || p.provider));
@@ -244,6 +248,23 @@ magpie.plugin("modelprobe", (ctx) => {
           : bad(p)));
         line.append(el("span", "mp-pago", ago(p.at)));
         inner.append(line);
+      }
+      // the routes: which groups carry it, and the order their members
+      // fall back through — what "auto/x works" is actually made of
+      const rs = routes[r.id];
+      if (rs?.length) {
+        inner.append(el("div", "mp-sect", t("Routing")));
+        for (const g of rs) {
+          const line = el("div", "mp-p");
+          line.append(el("span", "mp-pname", "group/" + g.group));
+          const order = g.members.map((m) => {
+            const pid = m.split("/")[0];
+            const ch = r.providers.find((x) => x.provider === pid);
+            return (ch ? (ch.ok ? "✓" : "✗") : "?") + " " + m;
+          });
+          line.append(el("span", "mp-psay mp-order", order.join("  →  ")));
+          inner.append(line);
+        }
       }
       box.append(inner);
     }

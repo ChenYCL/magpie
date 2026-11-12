@@ -509,3 +509,41 @@ func setStep(s string) {
 	current.Step = s
 	mu.Unlock()
 }
+
+// Route is one routing group that carries a model id, with its members in
+// the order a request falls back through them. A member of a group of
+// groups is named by its own group first.
+type Route struct {
+	Group   string   `json:"group"`   // the group's id, without "group/"
+	Name    string   `json:"name,omitempty"` // the group's name, as the window shows it
+	Members []string `json:"members"` // "provider/model", in order
+}
+
+// RoutesFor is every routing group that carries id, outermost groups first,
+// each with its members in order. An id no group carries returns nothing:
+// it is reachable only by its bare provider ids.
+func RoutesFor(id string) []Route {
+	find := provider.GroupFinder()
+	var out []Route
+	for _, g := range provider.Groups() {
+		if g.Disabled || g.Hidden {
+			continue
+		}
+		_, ms, ok := find(g.ID)
+		if !ok {
+			continue
+		}
+		var members []string
+		for _, m := range ms {
+			if m.Model == id {
+				members = append(members, m.Provider.ID+"/"+m.Model)
+			}
+		}
+		if len(members) == 0 {
+			continue
+		}
+		out = append(out, Route{Group: g.ID, Name: g.Name, Members: members})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Group < out[j].Group })
+	return out
+}

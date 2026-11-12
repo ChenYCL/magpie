@@ -27,3 +27,6 @@
 .mp-q { flex: 1 1 200px; }
 .mp-fail { flex: none; }
 .mp-clip { position: fixed; left: -9999px; top: 0; }
+
+.mp-sect { flex: 1 1 100%; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); opacity: .75; margin-top: 2px; }
+.mp-order { white-space: normal; line-height: 1.5; }

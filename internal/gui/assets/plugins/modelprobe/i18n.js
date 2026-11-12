@@ -1,5 +1,7 @@
 magpie.strings({
   zh: {
+"Channels": "渠道",
+    "Routing": "路由",
     "Model probe": "模型探测",
     "Check which model ids answer": "检查哪些模型 id 可用",
     "A standing round asks every exposed model the smallest request that tells a working one from a dead one. It is magpie's own request, counted in no usage total.": "定时一轮会给每个已暴露的模型发一个最小的请求，足以分辨能用还是不能。它是 magpie 自己的请求，不计入任何用量统计。",
@@ -38,6 +40,8 @@ magpie.strings({
     "…": "…",
   },
   "zh-TW": {
+"Channels": "渠道",
+    "Routing": "路由",
     "Model probe": "模型探測",
     "Check which model ids answer": "檢查哪些模型 id 可用",
     "A standing round asks every exposed model the smallest request that tells a working one from a dead one. It is magpie's own request, counted in no usage total.": "定時一輪會給每個已暴露的模型送一個最小的請求，足以分辨能用還是不能用。它是 magpie 自己的請求，不計入任何用量統計。",
@@ -76,6 +80,8 @@ magpie.strings({
     "…": "…",
   },
   ja: {
+"Channels": "チャネル",
+    "Routing": "経路",
     "Model probe": "モデル探査",
     "Check which model ids answer": "どのモデル id が応答するかを調べる",
     "A standing round asks every exposed model the smallest request that tells a working one from a dead one. It is magpie's own request, counted in no usage total.": "定時の一巡は、公開しているすべてのモデルに、生きているか死んでいるかが分かる最小のリクエストを送ります。magpie 自身のリクエストで、利用量の集計には入りません。",
@@ -114,6 +120,8 @@ magpie.strings({
     "…": "…",
   },
   de: {
+"Channels": "Kanäle",
+    "Routing": "Routen",
     "Model probe": "Modellprüfung",
     "Check which model ids answer": "Prüfen, welche Modell-ids antworten",
     "A standing round asks every exposed model the smallest request that tells a working one from a dead one. It is magpie's own request, counted in no usage total.": "Ein regelmäßiger Durchlauf schickt jedem angebotenen Modell die kleinste Anfrage, die ein lebendes von einem toten unterscheidet. Sie ist magpies eigene Anfrage und zählt in keine Nutzung.",

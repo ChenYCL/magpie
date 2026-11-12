@@ -9,6 +9,7 @@ import (
 	_ "github.com/yetone/magpie/plugins/gwplugins"
 	_ "github.com/yetone/magpie/plugins/library"
 	_ "github.com/yetone/magpie/plugins/middleware"
+	_ "github.com/yetone/magpie/plugins/modelprobe"
 	_ "github.com/yetone/magpie/plugins/otel"
 	_ "github.com/yetone/magpie/plugins/presets"
 	_ "github.com/yetone/magpie/plugins/redact"

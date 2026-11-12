@@ -5,6 +5,9 @@
 const I18N = {
   zh: {
     "Collapse all": "全部收起",
+    "Model probe": "模型探测",
+    "Which model ids answer, at which providers: a standing check every half hour, and a run of one or several when you ask": "哪些模型 id 可用、在哪些供应商：每半小时自动检查一次，也可以手动检查一个或多个",
+    "The model probe is on": "模型探测已开启",
     "Sandbox": "沙箱",
     "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "给不可信的操作一个专属沙箱：命令在一个全新的容器里运行，不碰这台机器",
     "The sandbox is on": "沙箱已开启",
@@ -4751,6 +4754,9 @@ const I18N = {
   },
   "zh-TW": {
     "Collapse all": "全部收起",
+    "Model probe": "模型探測",
+    "Which model ids answer, at which providers: a standing check every half hour, and a run of one or several when you ask": "哪些模型 id 可用、在哪些供應商：每半小時自動檢查一次，也可以手動檢查一個或多個",
+    "The model probe is on": "模型探測已開啟",
     "Sandbox": "沙箱",
     "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "給不可信的操作一個專屬沙箱：命令在一個全新的容器裡執行，不碰這台機器",
     "The sandbox is on": "沙箱已開啟",
@@ -9482,6 +9488,9 @@ const I18N = {
   },
   ja: {
     "Collapse all": "すべて折りたたむ",
+    "Model probe": "モデル探査",
+    "Which model ids answer, at which providers: a standing check every half hour, and a run of one or several when you ask": "どのモデル id がどのプロバイダで応答するか: 30 分ごとの定時チェックと、任意の実行",
+    "The model probe is on": "モデル探査がオンです",
     "Sandbox": "サンドボックス",
     "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "信頼できない作業のための専用サンドボックス：コマンドは新しいコンテナで実行され、このマシンには触れない",
     "The sandbox is on": "サンドボックスは有効",
@@ -14217,6 +14226,9 @@ const I18N = {
   },
   de: {
     "Collapse all": "Alle einklappen",
+    "Model probe": "Modellprüfung",
+    "Which model ids answer, at which providers: a standing check every half hour, and a run of one or several when you ask": "Welche Modell-ids antworten, bei welchen Anbietern: eine Prüfung alle halbe Stunde und auf Wunsch eine oder mehrere",
+    "The model probe is on": "Die Modellprüfung ist an",
     "Sandbox": "Sandbox",
     "A box of its own for untrusted work: a command runs in a fresh container, not on this computer": "Ein eigener Sandkasten für nicht vertrauenswürdige Arbeit: ein Befehl läuft in einem frischen Container, nicht auf diesem Rechner",
     "The sandbox is on": "Der Sandkasten ist an",

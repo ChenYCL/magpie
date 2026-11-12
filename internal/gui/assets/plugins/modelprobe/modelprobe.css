@@ -1,0 +1,29 @@
+/* The Model probe page: one line per model id, its providers behind it. */
+.mp-page { max-width: 900px; }
+.mp-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.mp-head h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.mp-body { display: flex; flex-direction: column; gap: 10px; }
+.mp-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.mp-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: 12px; }
+.mp-row:last-child { border-bottom: 0; }
+.mp-row.down { background: color-mix(in srgb, var(--error) 6%, transparent); }
+.mp-pick { flex: none; margin: 0; }
+.mp-id { flex: 1 1 280px; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.mp-id:hover code { color: var(--accent); }
+.mp-id code { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; user-select: text; }
+.mp-caret { flex: none; width: 10px; color: var(--muted); font-size: 10px; }
+.mp-count { flex: none; font-size: 10.5px; padding: 1px 6px; border-radius: 5px; background: var(--card); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.mp-count.some { color: var(--warning); }
+.mp-count.none { color: var(--error); }
+.mp-one { flex: none; font: inherit; font-size: 11px; padding: 2px 8px; color: var(--muted); border: 0; border-radius: 5px; background: none; box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; }
+.mp-one:hover { color: var(--fg); }
+.mp-why { flex: 1 1 100%; font-size: 11px; color: var(--error); padding-left: 26px; }
+.mp-providers { flex: 1 1 100%; display: flex; flex-direction: column; gap: 2px; padding: 4px 0 6px 26px; }
+.mp-p { display: flex; align-items: baseline; gap: 8px; font-size: 11px; }
+.mp-p.down .mp-psay { color: var(--error); }
+.mp-pname { flex: none; min-width: 120px; color: var(--fg-2); }
+.mp-psay { flex: 1 1 auto; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-pago { flex: none; color: var(--muted); opacity: .7; }
+.mp-q { flex: 1 1 200px; }
+.mp-fail { flex: none; }
+.mp-clip { position: fixed; left: -9999px; top: 0; }

@@ -529,7 +529,7 @@ func RoutesFor(id string) []Route {
 		if g.Disabled || g.Hidden {
 			continue
 		}
-		_, ms, ok := find(g.ID)
+		_, ms, ok := find(provider.GroupPrefix + g.ID)
 		if !ok {
 			continue
 		}

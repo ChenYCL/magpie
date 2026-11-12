@@ -26,11 +26,11 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
-	"github.com/yetone/magpie/internal/fingerprint"
-	"github.com/yetone/magpie/internal/proxypool"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/filememo"
+	"github.com/yetone/magpie/internal/fingerprint"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/proxypool"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
 )
@@ -1103,6 +1103,19 @@ func Save(p Provider) error {
 	if err := settings.CheckProxy(p.Proxy); err != nil {
 		return err
 	}
+	// a provider's fingerprint and its pool of exits, checked as they came
+	// in (the merge of upstream main dropped these; the tests red since)
+	if err := p.ProxyPool.Valid(); err != nil {
+		return err
+	}
+	if p.Fingerprint.Custom != nil {
+		if err := p.Fingerprint.Custom.Valid(); err != nil {
+			return err
+		}
+	}
+	if p.Fingerprint.Profile != "" && p.Fingerprint.Custom == nil && fingerprint.Get(p.Fingerprint.Profile) == nil {
+		return fmt.Errorf("%q is no fingerprint magpie knows: pick one of %s, or write your own", p.Fingerprint.Profile, strings.Join(fingerprint.Ids(), ", "))
+	}
 	if err := checkAccountProxies(p.AccountProxies); err != nil {
 		return err
 	}
@@ -1597,6 +1610,46 @@ func ownNetwork(hostport string) bool {
 	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || cgnat.Contains(ip))
 }
 
+// normalFingerprint is a fingerprint as it is saved: its profile id and its
+// custom profile's words trimmed, a say of neither dropped.
+func normalFingerprint(a fingerprint.Assign) fingerprint.Assign {
+	a.Profile = strings.TrimSpace(a.Profile)
+	if a.Custom != nil {
+		c := *a.Custom
+		c.ID = strings.TrimSpace(c.ID)
+		c.Name = strings.TrimSpace(c.Name)
+		h := make(map[string]string, len(c.Headers))
+		for k, v := range c.Headers {
+			if k = strings.TrimSpace(k); k != "" {
+				h[k] = strings.TrimSpace(v)
+			}
+		}
+		c.Headers = h
+		a.Custom = &c
+	}
+	if a.Profile == "" && a.Custom == nil {
+		return fingerprint.Assign{}
+	}
+	return a
+}
+
+// normalPool is a pool as it is saved: each exit's address trimmed and a
+// pool with no exit dropped.
+func normalPool(p proxypool.Pool) proxypool.Pool {
+	out := proxypool.Pool{Mode: strings.TrimSpace(p.Mode), FailThreshold: p.FailThreshold, Rest: strings.TrimSpace(p.Rest), Disabled: p.Disabled}
+	for _, e := range p.Exits {
+		u := strings.TrimSpace(e.URL)
+		if u == "" {
+			continue
+		}
+		out.Exits = append(out.Exits, proxypool.Exit{URL: u, Label: strings.TrimSpace(e.Label), Weight: e.Weight, Disabled: e.Disabled})
+	}
+	if len(out.Exits) == 0 {
+		return proxypool.Pool{}
+	}
+	return out
+}
+
 func normalize(p Provider) Provider {
 	p.ID = strings.ToLower(strings.TrimSpace(p.ID))
 	p.Name = strings.TrimSpace(p.Name)
@@ -1606,6 +1659,10 @@ func normalize(p Provider) Provider {
 	p.Patience = min(p.Patience, PatienceLongest)
 	p.Key = strings.TrimSpace(p.Key)
 	p.Proxy = strings.TrimSpace(p.Proxy)
+	// a provider's fingerprint and its pool of exits, as they are saved
+	// (the merge dropped the two; the tests red since)
+	p.Fingerprint = normalFingerprint(p.Fingerprint)
+	p.ProxyPool = normalPool(p.ProxyPool)
 	p.AccountProxies = normalAccountProxies(p.AccountProxies)
 	p.AccountModels = normalAccountModels(p.AccountModels)
 	p.AccountModelsAll = normalModelsAll(p.AccountModelsAll, p.AccountModels)

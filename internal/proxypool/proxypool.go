@@ -230,7 +230,17 @@ func Pick(id string, p Pool, pin string) (choice string, done func(*http.Respons
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// a caller pinned to an exit keeps it while it is ready
+	// a caller pinned to an exit keeps it while it is ready. A pin that
+	// names its exit outright ("pinned:", the X-Magpie-Proxy header) takes
+	// that exit at once — the first request through it too, which the
+	// remembered pins of an account, a key or a session only reach after a
+	// first pick has put them there
+	if addr, ok := strings.CutPrefix(pin, "pinned:"); ok {
+		if e, ok := find(exits, addr); ok && s.ready(e, now, p) {
+			s.count(e, now)
+			return e.URL, s.done(e, p, now), true
+		}
+	}
 	if pin != "" {
 		if addr, ok := s.pin[pin]; ok {
 			if e, ok := find(exits, addr); ok && s.ready(e, now, p) {

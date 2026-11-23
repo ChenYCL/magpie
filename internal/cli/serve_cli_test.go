@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -12,6 +13,11 @@ import (
 // and, when MAGPIE_ADDR puts it on the network (a Docker image) or it is
 // shared from Settings, a gateway key from others: never from anyone.
 func TestKeyNote(t *testing.T) {
+	// the words are a host's: the suite runs in a container image, where
+	// magpie says it is one (gateway.InContainer)
+	was := gateway.InContainer
+	gateway.InContainer = func() bool { return false }
+	t.Cleanup(func() { gateway.InContainer = was })
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -66,6 +72,9 @@ func TestAdvertisedURL(t *testing.T) {
 // Shared, the serve banner (docker logs) says where other machines reach
 // the gateway: MAGPIE_PUBLIC_URL when a container sets it.
 func TestShareLines(t *testing.T) {
+	was := gateway.InContainer
+	gateway.InContainer = func() bool { return false }
+	t.Cleanup(func() { gateway.InContainer = was })
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

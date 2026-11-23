@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +18,7 @@ import (
 	"github.com/tidwall/jsonc"
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Hooks (#1790) are commands an agent runs at a point of its turn: when
@@ -29,6 +30,7 @@ import (
 //	Codex        <codex home>/hooks.json     the same shape
 //	Gemini CLI   ~/.gemini/settings.json     the same shape, timeout in ms
 //	Cursor       ~/.cursor/hooks.json        hooks.<event>: [{command, timeout, matcher}], version 1
+//	DeepSeek Harness  $DSH_HOME/magpie-hooks.json  the Claude Code shape, run by the plugin dsh-hooks-claude-code (dsh_hooks.go)
 //
 // A portable event ("turn-end") is the same moment in each agent, under
 // each one's own name; an agent's own event ("codex:PermissionRequest")
@@ -39,7 +41,8 @@ import (
 
 // Hook is a command the agents ticked for it run at Event.
 type Hook struct {
-	Name string `json:"name"`
+	Name   string `json:"name"`
+	Bundle string `json:"bundle,omitempty"` // the plugin it came with (plugin.go)
 	// Description says what the hook is for, in any language (#2011):
 	// the name is letters, digits, - and _, which says little to someone
 	// who reads Chinese. Only the library keeps it; no agent is given it.
@@ -49,7 +52,9 @@ type Hook struct {
 	Event string `json:"event"`
 	// Matcher narrows a tool event to some tools: for a portable event
 	// "shell" or "edit" (each agent's own tool names for them), for an
-	// agent's own event the agent's own matcher; "" is every tool
+	// agent's own event the agent's own matcher; "" is every tool. A
+	// session-start hook is narrowed to the starts it runs at instead
+	// (#5604): one or more of HookStarts joined by "|", "compact"
 	Matcher string   `json:"matcher,omitempty"`
 	Command string   `json:"command"`
 	Timeout int      `json:"timeout,omitempty"` // seconds; 0 is the agent's own
@@ -70,19 +75,137 @@ var HookEvents = []string{"turn-end", "after-tool", "before-tool", "prompt", "se
 // HookTools are the kinds of tools a portable tool event can be narrowed to.
 var HookTools = []string{"shell", "edit"}
 
+// HookStarts are the starts a portable session-start hook can be narrowed
+// to (#5604, NEKO-CwC), in Claude Code's words for them (its SessionStart
+// source): a new session, one resumed, one after /clear, one after its
+// context was compacted, and a forked one.
+var HookStarts = []string{"startup", "resume", "clear", "compact", "fork"}
+
+// startSpec is how an agent's session start can be narrowed: the starts it
+// has (a hook narrowed to others is one it would never run), and how its
+// matcher names a set of them.
+type startSpec struct {
+	sources []string
+	// one: its matcher is one source, compared whole (Gemini CLI's
+	// hookPlanner.matchesTrigger is matcher === trigger)
+	one bool
+	// groups: its matcher names a group of them, not each one (Grok's
+	// "new" is a fresh session and one after /clear alike)
+	groups map[string][]string
+}
+
+// startSpecs are the agents whose session start takes a matcher, from
+// each one's own source. Cursor has none: its importer of Claude Code's
+// hooks says a SessionStart matcher "is not supported in Cursor, hooks
+// will fire for all triggers".
+var startSpecs = map[string]*startSpec{
+	// claude 2.1.316: SessionStart's matcher is tested on its source,
+	// startup|resume|clear|compact|fork, as a tool's name is
+	"claude": {sources: HookStarts},
+	// codex-rs/hooks: SessionStartSource is the same five, and a matcher of
+	// names and "|" is matched name by name (engine/matcher.rs)
+	"codex": {sources: HookStarts},
+	// gemini-cli: SessionStartSource is startup, resume and clear, and the
+	// matcher is compared whole
+	"gemini": {sources: []string{"startup", "resume", "clear"}, one: true},
+	// the Grok CLI (docs/user-guide/10-hooks.md): the start source is "new"
+	// for a fresh session, /new and /clear included, or "load" for one
+	// resumed; Claude Code's own words never match there
+	"grok":     {sources: []string{"startup", "resume", "clear"}, groups: grokStarts},
+	"grok-app": {sources: []string{"startup", "resume", "clear"}, groups: grokStarts},
+}
+
+var grokStarts = map[string][]string{"new": {"startup", "clear"}, "load": {"resume"}}
+
+// startSet is a session-start matcher's starts, in HookStarts' order, or
+// why it names none: a start it doesn't know, or one named twice.
+func startSet(m string) ([]string, error) {
+	parts := strings.Split(m, "|")
+	for i, p := range parts {
+		if !slices.Contains(HookStarts, p) || slices.Contains(parts[:i], p) {
+			return nil, fmt.Errorf("session-start can't be narrowed to %s", m)
+		}
+	}
+	return slices.DeleteFunc(slices.Clone(HookStarts), func(s string) bool { return !slices.Contains(parts, s) }), nil
+}
+
+// startMatcher is agent's own matcher for a session-start hook narrowed to
+// m, "" for every start, or why it can't run the hook at just those. A
+// hook is never widened to starts it was narrowed away from, nor written
+// with a matcher the agent never matches: either would run it where the
+// user said not to, or nowhere, and say nothing.
+func startMatcher(agent, m string) (string, error) {
+	if m == "" {
+		return "", nil
+	}
+	set, err := startSet(m)
+	if err != nil {
+		return "", err
+	}
+	sp := startSpecs[agent]
+	if sp == nil {
+		return "", errors.New("its session start can't be narrowed: it runs a hook at every start")
+	}
+	in := slices.DeleteFunc(slices.Clone(sp.sources), func(s string) bool { return !slices.Contains(set, s) })
+	switch {
+	case len(in) == 0:
+		return "", fmt.Errorf("it has no session start called %s", strings.Join(set, " or "))
+	case len(in) == len(sp.sources):
+		// every start it has: the rest are ones it never makes
+		return "", nil
+	case sp.one:
+		if len(in) > 1 {
+			return "", fmt.Errorf("its session start can be narrowed to one of %s, not to %s", strings.Join(sp.sources, ", "), strings.Join(in, "|"))
+		}
+		return in[0], nil
+	case sp.groups != nil:
+		for _, g := range slices.Sorted(maps.Keys(sp.groups)) {
+			if slices.Equal(sp.groups[g], in) {
+				return g, nil
+			}
+		}
+		var says []string
+		for _, g := range slices.Sorted(maps.Keys(sp.groups)) {
+			says = append(says, strings.Join(sp.groups[g], "|"))
+		}
+		return "", fmt.Errorf("its session start can be narrowed to %s, not to %s", strings.Join(says, " or "), strings.Join(in, "|"))
+	}
+	return strings.Join(in, "|"), nil
+}
+
+// startsTaken are the session-start matchers agent can be given, each in
+// HookStarts' order: what the page offers it.
+func startsTaken(agent string) []string {
+	var out []string
+	for bits := 1; bits < 1<<len(HookStarts); bits++ {
+		var set []string
+		for i, s := range HookStarts {
+			if bits&(1<<i) != 0 {
+				set = append(set, s)
+			}
+		}
+		m := strings.Join(set, "|")
+		if _, err := startMatcher(agent, m); err == nil {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // hookSpec is how one agent keeps its hooks.
 type hookSpec struct {
 	path   string
 	events map[string]string // portable → the agent's own
 	native []string          // every event the agent has
 	tools  map[string]string // shell, edit → the agent's matcher for them
+	agent  string            // whose: the agent's id, for its session start's matcher
 	flat   bool              // Cursor: an entry is the command itself, not a group of them
 	ms     bool              // Gemini: timeouts in milliseconds
 	toml   bool              // Grok: hooks are [[hooks.<Event>]] tables in config.toml, not JSON
 }
 
 // hookAgents are the agents magpie can give hooks to.
-var hookAgents = []string{"claude", "codex", "cursor", "gemini", "grok", "grok-app"}
+var hookAgents = []string{"claude", "codex", "cursor", "dsh", "gemini", "grok", "grok-app"}
 
 // grokHookEvents are the events the Grok CLI fires (docs/user-guide/10-hooks.md),
 // shared by Grok Build and the Grok App that runs it. Only the ones magpie
@@ -132,29 +255,51 @@ var claudeHookEvents = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure
 	"DirectoryAdded", "MessageDisplay"}
 
 func hookSpecOf(t *Target) (*hookSpec, string) {
+	sp, why := hookSpecFor(t)
+	if sp != nil {
+		sp.agent = t.Agent.ID
+	}
+	return sp, why
+}
+
+// claudeHookSpec is how Claude Code keeps hooks in a settings file at path:
+// its own settings.json, or a project's .claude/settings.local.json.
+func claudeHookSpec(path string) *hookSpec {
+	return &hookSpec{
+		path: path,
+		events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
+			"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
+		native: claudeHookEvents,
+		tools:  map[string]string{"shell": "Bash", "edit": "Edit|Write|MultiEdit"},
+		agent:  "claude",
+	}
+}
+
+// codexHookSpec is how Codex keeps hooks in a hooks.json at path, whose
+// events are codex-rs/hooks' HookEventName's: the one beside its
+// config.toml, or a project's .codex/hooks.json.
+func codexHookSpec(path string) *hookSpec {
+	return &hookSpec{
+		path: path,
+		events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
+			"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
+		native: []string{"PreToolUse", "PermissionRequest", "PostToolUse", "PreCompact", "PostCompact", "SessionStart", "SessionEnd",
+			"UserPromptSubmit", "SubagentStart", "SubagentStop", "Stop", "Interrupt"},
+		tools: map[string]string{"shell": "Bash", "edit": "apply_patch"},
+		agent: "codex",
+	}
+}
+
+func hookSpecFor(t *Target) (*hookSpec, string) {
 	if t.Agent.WSL != "" {
 		return nil, wslNoHooks(t.Agent)
 	}
 	switch t.Agent.ID {
 	case "claude":
-		return &hookSpec{
-			path: filepath.Join(claudeDir(), "settings.json"),
-			events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
-				"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
-			native: claudeHookEvents,
-			tools:  map[string]string{"shell": "Bash", "edit": "Edit|Write|MultiEdit"},
-		}, ""
+		return claudeHookSpec(filepath.Join(claudeDir(), "settings.json")), ""
 	case "codex":
-		// codex-rs/hooks: hooks.json beside config.toml, whose events are
-		// HookEventName's
-		return &hookSpec{
-			path: filepath.Join(codexDir(), "hooks.json"),
-			events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
-				"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
-			native: []string{"PreToolUse", "PermissionRequest", "PostToolUse", "PreCompact", "PostCompact", "SessionStart", "SessionEnd",
-				"UserPromptSubmit", "SubagentStart", "SubagentStop", "Stop", "Interrupt"},
-			tools: map[string]string{"shell": "Bash", "edit": "apply_patch"},
-		}, ""
+		// codex-rs/hooks: hooks.json beside config.toml
+		return codexHookSpec(filepath.Join(codexDir(), "hooks.json")), ""
 	case "gemini":
 		// gemini-cli packages/core/src/hooks/types.ts, HookEventName
 		return &hookSpec{
@@ -184,6 +329,8 @@ func hookSpecOf(t *Target) (*hookSpec, string) {
 		// Grok App runs the same CLI, on a custom route reading
 		// agent-home/config.toml, the same [[hooks.<Event>]] shape
 		return grokHookSpec(t.MCP.Path), ""
+	case "dsh":
+		return dshHookSpec(t)
 	}
 	return nil, fmt.Sprintf("%s has no hooks magpie can write", t.Agent.Name)
 }
@@ -208,7 +355,10 @@ func (sp *hookSpec) event(agent string, h *Hook) (string, error) {
 // entry is h as the agent's file holds it, under its event ev.
 func (sp *hookSpec) entry(h *Hook, ev string) json.RawMessage {
 	m := h.Matcher
-	if !strings.Contains(h.Event, ":") {
+	switch {
+	case h.Event == "session-start":
+		m, _ = startMatcher(sp.agent, h.Matcher) // one it can't take is never written (syncHooks)
+	case !strings.Contains(h.Event, ":"):
 		m = sp.tools[h.Matcher] // "" for none, and for an event that takes no matcher
 	}
 	timeout := h.Timeout
@@ -314,6 +464,10 @@ func (h *Hook) check() error {
 	}
 	if !slices.Contains(HookEvents, h.Event) {
 		return fmt.Errorf("no event called %s", h.Event)
+	}
+	if h.Matcher != "" && h.Event == "session-start" {
+		_, err := startSet(h.Matcher)
+		return err
 	}
 	if h.Matcher != "" && (!slices.Contains(toolEvents, h.Event) || !slices.Contains(HookTools, h.Matcher)) {
 		return fmt.Errorf("%s can't be narrowed to %s", h.Event, h.Matcher)
@@ -541,20 +695,72 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 		}
 		return
 	}
-	failAll := func(err error) {
-		for _, h := range want {
-			res.fail(id, "hook:"+h.Name, err)
-		}
-		if len(want) == 0 {
-			res.fail(id, "hooks", err)
+	w := &hookWrite{id: id, sp: sp, want: want, recs: a.Hooks, gone: t.Gone,
+		keep: func(path string) error { return b.keep(id, path) },
+		fail: func(what string, err error) { res.fail(id, what, err) }}
+	if id == "codex" {
+		w.rekeyCfg = filepath.Join(codexDir(), "config.toml")
+	}
+	recs, changed, ok := w.run()
+	if changed {
+		res.changed(id)
+	}
+	if ok {
+		a.Hooks = recs
+		if id == "dsh" {
+			// dsh runs a hooks file through a plugin its profiles load
+			if err := dshHooksPlugin(t, sp.path, len(recs) > 0, func(path string) error { return b.keep(id, path) }); err != nil {
+				res.fail(id, "hooks", err)
+			}
 		}
 	}
+}
+
+// hookWrite is one agent's hooks file brought to what it should hold: the
+// entries of want written in, those of recs (what magpie wrote before) no
+// longer wanted taken out, and an entry the user changed or wrote
+// themselves left as it is. The agent's own file (syncHooks) and a
+// project's (project_plugins.go) are both brought up this way.
+type hookWrite struct {
+	id   string
+	sp   *hookSpec
+	want []*Hook
+	recs []HookEntry
+	gone bool // the agent is gone from here: nothing new is written
+	// keep backs a file up before it is written; nil writes it as it is
+	keep func(path string) error
+	// rekeyCfg is Codex's config.toml, whose trust of each hook moves
+	// with the entries left after one taken out; "" for another agent
+	rekeyCfg string
+	fail     func(what string, err error)
+}
+
+// run writes the file, and says what magpie's records of it are now,
+// whether it was written, and false when they should stay as they were
+// (the file couldn't be read or written).
+func (w *hookWrite) run() (recs []HookEntry, changed, ok bool) {
+	sp, want := w.sp, w.want
+	failAll := func(err error) {
+		for _, h := range want {
+			w.fail("hook:"+h.Name, err)
+		}
+		if len(want) == 0 {
+			w.fail("hooks", err)
+		}
+	}
+	keep := func(path string) error {
+		if w.keep == nil {
+			return nil
+		}
+		return w.keep(path)
+	}
+	id, gone := w.id, w.gone
 	var doc []byte
 	if !sp.toml {
 		d, err := readHooksFile(sp.path)
 		if err != nil {
 			failAll(err)
-			return
+			return nil, false, false
 		}
 		doc = d
 	}
@@ -584,12 +790,15 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	var ws []*wanted
 	for _, h := range want {
 		ev, err := sp.event(id, h)
+		if err == nil && h.Event == "session-start" {
+			_, err = startMatcher(id, h.Matcher)
+		}
 		if err != nil {
-			res.fail(id, "hook:"+h.Name, err)
+			w.fail("hook:"+h.Name, err)
 			continue
 		}
 		if _, err := listOf(ev); err != nil {
-			res.fail(id, "hook:"+h.Name, err)
+			w.fail("hook:"+h.Name, err)
 			continue
 		}
 		ws = append(ws, &wanted{h: h, ev: ev, entry: sp.entry(h, ev)})
@@ -613,9 +822,9 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	var kept []HookEntry
 	drop := map[string][]int{} // event → the entries to take out
 	var unread []HookEntry     // records of an event whose list can't be read now
-	for _, rec := range a.Hooks {
+	for _, rec := range w.recs {
 		if _, err := listOf(rec.Event); err != nil {
-			res.fail(id, "hook:"+rec.Name, err)
+			w.fail("hook:"+rec.Name, err)
 			unread = append(unread, rec)
 			continue
 		}
@@ -638,7 +847,7 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	for _, w := range ws {
 		// an agent gone from here is given nothing new; what it has stays
 		// its until unticked
-		if w.done || t.Gone {
+		if w.done || gone {
 			continue
 		}
 		// the same entry of the user's own already runs: it isn't written
@@ -650,13 +859,12 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 		added = append(added, HookEntry{Name: w.h.Name, Event: w.ev, Entry: w.entry})
 	}
 	if len(drop) == 0 && len(add) == 0 {
-		a.Hooks = append(kept, unread...)
-		return
+		return append(kept, unread...), false, true
 	}
 	if sp.toml {
-		if err := b.keep(id, sp.path); err != nil {
+		if err := keep(sp.path); err != nil {
 			failAll(err)
-			return
+			return nil, false, false
 		}
 		err := os.MkdirAll(filepath.Dir(sp.path), 0o755)
 		if err == nil {
@@ -680,11 +888,9 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 		}
 		if err != nil {
 			failAll(fmt.Errorf("%s: %w", sp.path, err))
-			return
+			return nil, false, false
 		}
-		res.changed(id)
-		a.Hooks = append(append(kept, added...), unread...)
-		return
+		return append(append(kept, added...), unread...), true, true
 	}
 	// what each list becomes, and where each entry left in it moves to
 	var set []edit.KV
@@ -724,26 +930,26 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 			set = append(set, edit.KV{Path: "hooks." + ev, Value: next})
 		}
 	}
-	if err := b.keep(id, sp.path); err != nil {
+	if err := keep(sp.path); err != nil {
 		failAll(err)
-		return
+		return nil, false, false
 	}
 	// Codex trusts a hook by where it is (codex-rs/hooks: hook_key, the
 	// file's path, the event, the group's and the handler's index): an
 	// entry taken out from before the user's own would leave their trust
 	// on the wrong ones, so it is moved with them
 	var rekey func() error
-	if id == "codex" && len(drop) > 0 {
-		cfg := filepath.Join(codexDir(), "config.toml")
+	if w.rekeyCfg != "" && len(drop) > 0 {
+		cfg := w.rekeyCfg
 		f, err := codexRekey(cfg, sp.path, moved)
 		if err != nil {
 			failAll(err)
-			return
+			return nil, false, false
 		}
 		if f != nil {
-			if err := b.keep(id, cfg); err != nil {
+			if err := keep(cfg); err != nil {
 				failAll(err)
-				return
+				return nil, false, false
 			}
 			rekey = f
 		}
@@ -772,19 +978,18 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	}
 	if err != nil {
 		failAll(fmt.Errorf("%s: %w", sp.path, err))
-		return
+		return nil, false, false
 	}
-	res.changed(id)
 	if rekey != nil {
 		if err := rekey(); err != nil {
-			res.fail(id, "hooks", fmt.Errorf("the hooks are written, but Codex's trust of the ones after them couldn't be moved: review them in Codex's /hooks (%w)", err))
+			w.fail("hooks", fmt.Errorf("the hooks are written, but Codex's trust of the ones after them couldn't be moved: review them in Codex's /hooks (%w)", err))
 		}
 	}
-	a.Hooks = append(append(kept, added...), unread...)
+	return append(append(kept, added...), unread...), true, true
 }
 
 // codexState is a [hooks.state."<key>"] header line in Codex's config.toml.
-var codexState = regexp.MustCompile(`^(\s*\[\s*hooks\s*\.\s*state\s*\.\s*)("(?:[^"\\]|\\.)*"|'[^']*')(\s*\].*)$`)
+var codexState = lazyre.New(`^(\s*\[\s*hooks\s*\.\s*state\s*\.\s*)("(?:[^"\\]|\\.)*"|'[^']*')(\s*\].*)$`)
 
 // codexStateKey splits a hook's trust key: the file's path, the event's
 // label, the group's index and the handler's.
@@ -846,7 +1051,7 @@ func codexRekey(cfg, hooksPath string, moved map[string]map[int]int) (func() err
 			State map[string]any `toml:"state"`
 		} `toml:"hooks"`
 	}
-	if err := toml.Unmarshal(raw, &whole); err != nil {
+	if err := toml.Unmarshal(edit.TOMLWithout(raw, "projects"), &whole); err != nil {
 		return nil, fmt.Errorf("%s: %w", cfg, err)
 	}
 	labels := map[string]map[int]int{}
@@ -991,6 +1196,14 @@ func SaveHook(old string, h Hook) (*Result, error) {
 				return fmt.Errorf("no hook called %s", old)
 			}
 			l.Hooks = slices.Delete(l.Hooks, i, i+1)
+			if old != h.Name {
+				for _, p := range l.Projects {
+					if a, ok := p.Hooks[old]; ok {
+						delete(p.Hooks, old)
+						p.Hooks[h.Name] = a
+					}
+				}
+			}
 		}
 		h.Agents = orNone(slices.Compact(slices.Sorted(slices.Values(h.Agents))))
 		l.Hooks = append(l.Hooks, &h)
@@ -1053,6 +1266,11 @@ func hookTakes(h *Hook, a string) bool {
 	if x, _, ok := strings.Cut(h.Event, ":"); ok {
 		return sameHookFamily(x, a)
 	}
+	if h.Event == "session-start" {
+		if _, err := startMatcher(a, h.Matcher); err != nil {
+			return false
+		}
+	}
 	return slices.Contains(hookAgents, a)
 }
 
@@ -1076,6 +1294,7 @@ func RemoveHooks(names []string) (*Result, error) {
 			return errors.New(failed[0].Error)
 		}
 		l.Hooks = slices.DeleteFunc(l.Hooks, func(h *Hook) bool { return slices.Contains(names, h.Name) })
+		l.dropProjectHooks(names)
 		return nil
 	})
 	if res != nil {
@@ -1113,6 +1332,10 @@ type HookAgentView struct {
 	Off bool `json:"off,omitempty"`
 	// Events are its own events, for a hook of its alone
 	Events []string `json:"events,omitempty"`
+	// Starts are the session-start matchers it can be given (#5604);
+	// StartSources the starts it has, to say why it can't be given another
+	Starts       []string `json:"starts,omitempty"`
+	StartSources []string `json:"startSources,omitempty"`
 }
 
 // hooksView is the Hooks page for these agents, and those in stopped WSL
@@ -1128,6 +1351,10 @@ func (l *Library) hooksView(targets []*Target, asleep []*agent.Agent, of func(st
 		if sp != nil {
 			specs[t.Agent.ID] = sp
 			av.File, av.Off, av.Events = sp.path, hooksOff(t, sp), sp.native
+			av.Starts = startsTaken(t.Agent.ID)
+			if ss := startSpecs[t.Agent.ID]; ss != nil {
+				av.StartSources = ss.sources
+			}
 		}
 		agents = append(agents, av)
 	}

@@ -44,10 +44,18 @@ func warmClaudeLogin(send func(ctx context.Context, configDir string) error) fun
 		if i < 0 {
 			return fmt.Errorf("no Claude account %q", user)
 		}
+		var err error
 		if !ls[i].Active {
-			return inSavedClaudeDir(ls[i].User, func(dir string) error { return send(ctx, dir) })
+			err = inSavedClaudeDir(ls[i].User, func(dir string) error { return send(ctx, dir) })
+		} else {
+			err = send(ctx, "")
 		}
-		return send(ctx, "")
+		// "You've hit your weekly limit · resets Nov 24 at 5am": out till
+		// then, for the switch too (claude_said_out.go)
+		if err != nil {
+			noteClaudeSaid(ls[i].User, err.Error(), time.Now())
+		}
+		return err
 	}
 }
 
@@ -82,6 +90,17 @@ func ClaudeWarmed() map[string]time.Time { return codexWarmedIn(claudeWarmPath()
 // while settings say to, each with one request send makes.
 func KeepClaudeWindowsWarm(ctx context.Context, send func(ctx context.Context, configDir string) error) {
 	w := codexWarmer{path: claudeWarmPath(), now: time.Now, usage: claudeWarmUsage, send: warmClaudeLogin(send),
-		expect: claudeWindowsExpected, warmed: claudeWarmedNow}
+		expect: claudeWindowsExpected, warmed: claudeWarmedNow, held: claudeHeldFull}
 	keepWarm(ctx, "claude", w, func() (string, []string) { s := settings.Load(); return s.ClaudeWarmup, s.ClaudeWarmAts })
+}
+
+// claudeHeldFull says whether the Claude account user, read as q, is held at 100% of
+// a used-up window rather than spending extra usage: set so for every
+// account (ClaudeExtraUsage), or its extra usage at the cap set on its
+// Usage credits (Allowance.extraCapped).
+func claudeHeldFull(user string, q SubscriptionQuota, now time.Time) bool {
+	if !ClaudeExtraUsage() {
+		return true
+	}
+	return allowanceOf(q.Windows, now).extraCapped("", AccountCapsOf("claude", user), now).Credits
 }

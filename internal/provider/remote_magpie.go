@@ -88,13 +88,11 @@ func (p *Provider) remoteMagpieEndpoints() {
 	if root == "" {
 		return
 	}
-	if !strings.Contains(root, "://") {
-		root = "http://" + root
-	}
+	root = strings.TrimRight(WithScheme(root, "http"), "/")
 	for _, suf := range []string{
 		"/v1/messages/count_tokens", "/v1/messages",
 		"/v1/chat/completions", "/v1/responses", "/v1/systemone",
-		"/v1/embeddings", "/v1/rerank",
+		"/v1/embeddings", "/v1/rerank", "/v1/decisions",
 		"/v1/audio/transcriptions", "/v1/audio/translations", "/v1/audio/speech",
 		"/v1/images/generations", "/v1/images/edits",
 		"/v1/videos", "/v1",
@@ -197,4 +195,19 @@ func (p Provider) RemoteVia(model string) []string {
 		}
 	}
 	return nil
+}
+
+// RemotePrefers is the API a remote magpie's list says it asks the model
+// on best (magpie_prefers, PreferredEndpoint there); "" for another
+// provider's model, or one from a magpie from before it said.
+func (p Provider) RemotePrefers(model string) Protocol {
+	if !p.IsRemoteMagpie() {
+		return ""
+	}
+	for _, m := range p.liveByID(model) {
+		if m.Prefers != "" {
+			return Protocol(m.Prefers)
+		}
+	}
+	return ""
 }

@@ -19,6 +19,14 @@ const (
 	UsedShare = provider.SpentShare
 )
 
+// lapsingMin is the points of the used share that lapsing soon unspent
+// (Seat.Lapsing) must reach to send an account ahead in Least used first:
+// a few credits of a large pool are not worth unbalancing it for.
+const lapsingMin = 0.1
+
+// urgent says a seat with room has credits to spend before they lapse.
+func urgent(s Seat) bool { return tier(s.Used) == 0 && s.Lapsing >= lapsingMin }
+
 // tier is 0 for a share with room, 1 for low, 2 for all but used up.
 func tier(share float64) int {
 	switch {
@@ -32,13 +40,22 @@ func tier(share float64) int {
 
 // seatTier is tier of the seat's share used, but 0 for one set to spend
 // its credits before another account (Seat.First): a window it uses up
-// doesn't send its requests elsewhere (jojonas_xyz on X). Running low on
-// its week alone (Seat.WeekLow) is 0 too: Smart and Use before expiry
-// spend what is lost at the reset, and a week at 90% renewing today was
-// kept for last behind one renewing tomorrow (ysicing_01858 on Discord).
-// All but used up is 2 whatever the window.
+// doesn't send its requests elsewhere (jojonas_xyz on X). One that goes on
+// past its windows on a plugin's trial credits (Seat.Trial: a Kiro
+// account's trial after its month) is 0 too: what is left of the window
+// isn't all it has, so a group keeps it with those that have room and
+// asks it before they are all used up. Credits a ChatGPT account bought
+// (Seat.Credits alone) keep it with the used up unless it is First.
+// Running low on its week alone (Seat.WeekLow) is 0 too: Smart and Use
+// before expiry spend what is lost at the reset, and a week at 90%
+// renewing today was kept for last behind one renewing tomorrow
+// (ysicing_01858 on Discord). All but used up is 2 whatever the window,
+// for one with nothing to go on with.
 func seatTier(s Seat) int {
 	if s.First {
+		return 0
+	}
+	if s.Trial && s.Known && s.Used >= UsedShare {
 		return 0
 	}
 	if t := tier(s.Used); t != 1 || !s.WeekLow {
@@ -114,7 +131,11 @@ func identity(n int) []int {
 // Smart is the default: of those with quota to spare, the one whose
 // allowance renews soonest, since what it has left is lost then, while one
 // renewing later keeps: the biggest window decides — the week, not the five
-// hours in it — and the next one only when that renews in the same hour. An
+// hours in it — and the next one only when that renews in the same hour. A
+// biggest window whose left the next can no longer let through before it
+// renews (Seat.Unreached: a Volcengine Agent Plan's month two weeks out,
+// with more left than two weeks hold) is passed over: what the week
+// leaves is lost at its reset then, so the week decides (#5639). An
 // account with no week (Claude Enterprise's five hours alone) goes by its
 // five hours, so ahead of every week but one renewing sooner; a window not
 // started renews its whole span from now (#576). A Codex account that
@@ -153,7 +174,9 @@ var Smart = Strategy{Order: func(_ string, seats []Seat) []int {
 		if a.Learns != b.Learns {
 			return a.Learns
 		}
-		ri, rj := a.Soon, b.Soon
+		// a window that can't be used up before it renews any more ranks
+		// it no more: the next one does (Seat.Unreached)
+		ri, rj := a.Soon[min(a.Unreached, len(a.Soon)):], b.Soon[min(b.Unreached, len(b.Soon)):]
 		for k := 0; k < len(ri) || k < len(rj); k++ {
 			var x, y time.Time // to the hour, so a few minutes don't reorder
 			if k < len(ri) {
@@ -184,8 +207,28 @@ var Smart = Strategy{Order: func(_ string, seats []Seat) []int {
 	})
 	sort.SliceStable(low, func(i, j int) bool { return seats[low[i]].Used < seats[low[j]].Used })
 	sort.SliceStable(spent, func(i, j int) bool { return spentBefore(seats[spent[i]], seats[spent[j]]) })
-	return append(append(fine, low...), spent...)
+	return leadFirst(seats, append(append(fine, low...), spent...))
 }}
+
+// leadFirst is order with the seats of a provider set to be used first
+// (Seat.Lead) ahead of the rest, each side in order's own order: a key's
+// monthly credit spent before a subscription that serves the same model
+// (hzh_1119 on Discord). One all but used up stays with the others that
+// are, and one resting is passed over by the gateway as any is.
+func leadFirst(seats []Seat, order []int) []int {
+	var lead, rest []int
+	for _, i := range order {
+		if seats[i].Lead && seatTier(seats[i]) < 2 {
+			lead = append(lead, i)
+		} else {
+			rest = append(rest, i)
+		}
+	}
+	if len(lead) == 0 {
+		return order
+	}
+	return append(lead, rest...)
+}
 
 // spentBefore orders two seats all but used up: one that goes on on its
 // credits first (a Codex account holding them answers past its allowance;
@@ -243,7 +286,8 @@ func Drained(key string) {
 // nothing changed gives the same order, so a preview moves nothing.
 var Drain = Strategy{Exact: true, Order: func(pool string, seats []Seat) []int {
 	spent := func(s Seat) bool {
-		return s.Spent || !s.First && s.Known && s.Used >= provider.SpentShareOf(provider.Drain)
+		// one on its trial credits still answers: it isn't used up
+		return s.Spent || !s.First && !s.Trial && s.Known && s.Used >= provider.SpentShareOf(provider.Drain)
 	}
 	drains.Lock()
 	defer drains.Unlock()
@@ -288,6 +332,11 @@ var Rotate = Strategy{Order: func(pool string, seats []Seat) []int {
 // whose share was told and has room, and before those running low or
 // spent, as Smart and Pace keep the unknown. One not known that tells
 // what it has left as it answers goes first, once, as in Smart and Pace.
+// The share used is taken less what lapses soon unspent (Seat.Lapsing):
+// WorkBuddy's account with half of a year-long pack used but check-in
+// credits ending tomorrow ranks by what it can really lose, not by the
+// pool's share (kudi3699 on X): one with room whose credits lapse soon goes
+// ahead of the rest, the soonest first.
 var LeastUsed = Strategy{ByUse: true, Order: func(_ string, seats []Seat) []int {
 	left := byLeft(seats, fewerTokens)
 	// shared: the seat's share of its allowance was told — a use past 0
@@ -312,7 +361,12 @@ var LeastUsed = Strategy{ByUse: true, Order: func(_ string, seats []Seat) []int 
 	// shareless, kept for their cost before a share nearly gone; then
 	// those running low, then spent
 	place := func(s Seat) int {
-		switch t := tier(s.Used); {
+		t := tier(s.Used)
+		if s.Trial && s.Known && t == 2 {
+			// on its trial credits: what is left of the window isn't all it has
+			t = 0
+		}
+		switch {
 		case s.Learns:
 			return 0
 		case t == 0 && shared(s):
@@ -331,6 +385,14 @@ var LeastUsed = Strategy{ByUse: true, Order: func(_ string, seats []Seat) []int 
 		}
 		if ta, tb := tier(sa.Used), tier(sb.Used); ta == 2 && tb == 2 && sa.Credits != sb.Credits {
 			return sa.Credits
+		}
+		// credits about to lapse unspent cost nothing to spend: an account
+		// with some (Seat.Lapsing) goes before those without, the soonest
+		// lapse first; the share used decides among those alike
+		if ua, ub := urgent(sa), urgent(sb); ua != ub {
+			return ua
+		} else if ua && !sa.Lapse.Truncate(time.Hour).Equal(sb.Lapse.Truncate(time.Hour)) {
+			return sa.Lapse.Before(sb.Lapse)
 		}
 		if sa.Used != sb.Used {
 			return sa.Used < sb.Used
@@ -571,6 +633,43 @@ var Cheapest = Strategy{ByPrice: true, Order: func(_ string, seats []Seat) []int
 	return idx
 }}
 
+// SmallFirst sends a request to the member whose model has the smallest
+// context window, so the big ones are kept for the requests only they
+// hold: the gateway leaves out, before asking, every member whose window
+// the request is longer than (roomy), so the first left is the smallest
+// that holds it. In Smart's order otherwise: a seat all but used up
+// still goes after those with room, one set to be used first still
+// first, and members of one window in Smart's order among themselves; a
+// window not known goes after every known one.
+var SmallFirst = Strategy{ByWindow: true, Order: func(pool string, seats []Seat) []int {
+	idx := Smart.Order(pool, seats)
+	rank := func(s Seat) (int, int) {
+		g := 1
+		switch {
+		case seatTier(s) == 2:
+			g = 2
+		case s.Lead:
+			g = 0
+		}
+		return g, s.Window
+	}
+	sort.SliceStable(idx, func(a, b int) bool {
+		ga, wa := rank(seats[idx[a]])
+		gb, wb := rank(seats[idx[b]])
+		if ga != gb {
+			return ga < gb
+		}
+		if wa == wb {
+			return false
+		}
+		if wa == 0 || wb == 0 { // not known: after those known
+			return wb == 0
+		}
+		return wa < wb
+	})
+	return idx
+}}
+
 // sameCost: two prices within a millionth of each other, or of a cent a
 // million tokens, are the same price.
 func sameCost(a, b float64) bool {
@@ -594,4 +693,5 @@ var Builtin = map[string]Strategy{
 	provider.Cheapest:     Cheapest,
 	provider.Drain:        Drain,
 	provider.FreeExpiring: FreeExpiring,
+	provider.SmallFirst:   SmallFirst,
 }

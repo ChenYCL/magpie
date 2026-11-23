@@ -76,7 +76,7 @@ func storedGroups(t *testing.T) []map[string]any {
 }
 
 func TestParseRoutingStays(t *testing.T) {
-	for in, want := range map[string]string{"smart": "", "": "", "order": "order", "In-Order": "order", "rotate": "rotate", "usage": "usage", "least-used": "usage", "fast": "fast", "Fastest": "fast", "speed": "fast", "speed-first": "fast", "cheap": "cheap", "Cheapest": "cheap", "cheapest-first": "cheap", "price": "cheap", "expiring": "expiring", "free-expiry": "expiring", "Soonest-Free": "expiring"} {
+	for in, want := range map[string]string{"smart": "", "": "", "order": "order", "In-Order": "order", "rotate": "rotate", "usage": "usage", "least-used": "usage", "fast": "fast", "Fastest": "fast", "speed": "fast", "speed-first": "fast", "cheap": "cheap", "Cheapest": "cheap", "cheapest-first": "cheap", "price": "cheap", "expiring": "expiring", "free-expiry": "expiring", "Soonest-Free": "expiring", "fit": "fit", "small-first": "fit", "Small-Context-First": "fit"} {
 		if got, err := parseRouting(in); err != nil || got != want {
 			t.Errorf("routing %q: %q %v, want %q", in, got, err, want)
 		}
@@ -136,6 +136,18 @@ func TestApplyGroupPairs(t *testing.T) {
 		if err := applyGroupPairs(&g, []string{"context=" + c.v}, resolve, false); err != nil || g.Context != c.want {
 			t.Errorf("context=%s: %d %v", c.v, g.Context, err)
 		}
+	}
+	// compact=: where agents compact on the group (NovaStudiosss on X)
+	for _, c := range []struct {
+		v    string
+		want int
+	}{{"160k", 160000}, {"1m", 1000000}, {"off", 0}, {"", 0}} {
+		if err := applyGroupPairs(&g, []string{"compact=" + c.v}, resolve, false); err != nil || g.Compact != c.want {
+			t.Errorf("compact=%s: %d %v", c.v, g.Compact, err)
+		}
+	}
+	if err := applyGroupPairs(&g, []string{"compact=lots"}, resolve, false); err == nil {
+		t.Error("compact=lots was accepted")
 	}
 	// listed=no: its models offered through the group alone (#1783)
 	if err := applyGroupPairs(&g, []string{"listed=no"}, resolve, false); err != nil || !g.Unlists {
@@ -278,8 +290,8 @@ func TestCloseMatches(t *testing.T) {
 	}
 }
 
-// magpie group set <id> id=<new>: a found group loses its auto- prefix and
-// stays removed under the old id.
+// magpie group set <id> id=<new>: a found group loses its auto- prefix,
+// and its old id finds it under the new one, never as a second group.
 func TestGroupSetID(t *testing.T) {
 	groupsHome(t)
 	if _, err := setGroup("auto-m", []string{"id=Not Slug!"}); err == nil {
@@ -295,8 +307,10 @@ func TestGroupSetID(t *testing.T) {
 	if _, _, ok := provider.Resolve("group/m"); !ok {
 		t.Fatal("group/m not in the catalog")
 	}
-	if _, _, ok := provider.FindGroup("group/auto-m"); ok {
-		t.Fatal("auto-m is back beside m")
+	// the old id still answers, with the renamed group (00af08e7b), never
+	// a found auto-m of its own beside it
+	if old, _, ok := provider.FindGroup("group/auto-m"); !ok || old.ID != "m" {
+		t.Fatalf("group/auto-m: %v %+v", ok, old)
 	}
 	if _, err := addGroup("Other", []string{"models=a/only-a"}); err != nil {
 		t.Fatal(err)
@@ -353,5 +367,42 @@ func TestGroupAutoSkip(t *testing.T) {
 	}
 	if got := provider.AutoGroupSkip(); len(got) != 0 || !found() {
 		t.Fatalf("let back in: %v %v", got, found())
+	}
+}
+
+// A member saved in another case than its provider lists the model by is
+// that model, served, in `magpie groups` and `magpie group <id>` as in the
+// gateway: deepseek-agents/DeepSeek-V4-Pro read "not served" and the group
+// "no member ready" (@CHENGJIAHEGOXIS on X).
+func TestGroupsMemberInAnotherCaseIsServed(t *testing.T) {
+	groupsHome(t)
+	if err := provider.SaveGroup(provider.Group{ID: "ds", Name: "DS", Members: []string{"a/only-a"}}); err != nil {
+		t.Fatal(err)
+	}
+	// the reporter's spelling, as the file kept it
+	path := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "magpie", "providers.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"a/only-a"`) {
+		t.Fatalf("no member in %s:\n%s", path, b)
+	}
+	if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(b), `"a/only-a"`, `"a/Only-A"`)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := stdoutOf(t, groups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "not served") || strings.Contains(out, "no member ready") {
+		t.Errorf("magpie groups:\n%s", out)
+	}
+	out, err = stdoutOf(t, func() error { return groupCmd([]string{"group", "ds"}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "only-a") || strings.Contains(out, "not served") {
+		t.Errorf("magpie group ds:\n%s", out)
 	}
 }

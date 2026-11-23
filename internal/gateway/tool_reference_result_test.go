@@ -345,7 +345,7 @@ func TestBridgeRefusingResultRefsIsLearned(t *testing.T) {
 // A top-level tool_reference is none of this shape's business.
 func TestResultRefsLeavesTopLevelRefs(t *testing.T) {
 	body := `{"messages":[{"role":"user","content":[{"type":"tool_reference","tool_name":"check"},{"type":"text","text":"ok"}]}]}`
-	if got := string(withoutResultRefs([]byte(body))); got != body {
+	if got := string(withRefsAsText([]byte(body))); got != body {
 		t.Errorf("top-level reference went as %s", got)
 	}
 }

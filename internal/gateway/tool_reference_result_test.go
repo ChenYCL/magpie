@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -251,6 +252,7 @@ func (v *bridgeVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	v.bodies = append(v.bodies, string(b))
 	v.mu.Unlock()
 	var m struct {
+		Model   string `json:"model"`
 		Messages []struct {
 			Content []struct {
 				Type    string `json:"type"`
@@ -261,6 +263,7 @@ func (v *bridgeVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} `json:"messages"`
 	}
 	json.Unmarshal(b, &m)
+	log.Printf("bridge got model=%q len=%d", m.Model, len(b))
 	refused := false
 	for _, msg := range m.Messages {
 		for _, bl := range msg.Content {
@@ -300,7 +303,8 @@ func TestBridgeRefusingResultRefsIsLearned(t *testing.T) {
 		Models: []string{"q"}}); err != nil {
 		t.Fatal(err)
 	}
-	h := New().Handler()
+	sv := New()
+	h := sv.Handler()
 	post := func(body string) {
 		t.Helper()
 		rec := httptest.NewRecorder()
@@ -313,7 +317,7 @@ func TestBridgeRefusingResultRefsIsLearned(t *testing.T) {
 	post(reporterRefsOnly("nas/q"))
 	post(`{"model":"nas/q","max_tokens":8,"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":[{"type":"text","text":"ran"},{"type":"tool_reference","tool_name":"check"}]}]}]}`)
 	// the first ask is refused and its retry reshaped; the second request
-	// goes reshaped from the start (the refusal was learned)
+	// goes without one from the start (the refusal was learned)
 	sent := bv.sent()
 	if len(sent) != 3 {
 		t.Fatalf("the bridge was asked %d times, want the refusal once, its retry, and the second request as learned: %q", len(sent), sent)
@@ -321,9 +325,13 @@ func TestBridgeRefusingResultRefsIsLearned(t *testing.T) {
 	if !strings.Contains(sent[0], `"tool_reference"`) {
 		t.Fatalf("the first ask came already reshaped: %q", sent[0])
 	}
-	for _, got := range sent[1:] {
-		if strings.Contains(got, `"type":"tool_reference"`) || strings.Contains(got, `"type": "tool_reference"`) {
-			t.Fatalf("a reference inside a tool_result survived: %s", got)
+	// no reference rides inside a tool_result again: the one shape the
+	// bridge refuses. A result with no tool of its conversation's (the
+	// second request names none) is folded into the user's turn, where
+	// the bridge takes a reference.
+	for i, got := range sent[1:] {
+		if hasResultRefs([]byte(got)) {
+			t.Fatalf("a reference inside a tool_result survived (body %d): %s", i+1, got)
 		}
 	}
 	if !strings.Contains(sent[1], "Tool check is loaded and can be called now.") {
@@ -332,12 +340,13 @@ func TestBridgeRefusingResultRefsIsLearned(t *testing.T) {
 	if !strings.Contains(sent[1], `"tool_use_id":"toolu_direct_probe"`) {
 		t.Fatalf("the retry lost the result's pairing: %s", sent[1])
 	}
-	if !strings.Contains(sent[2], "ran") || !strings.Contains(sent[2], `"tool_use_id":"t"`) {
-		t.Fatalf("the second request lost its text or pairing: %s", sent[2])
+	if !strings.Contains(sent[2], "ran") {
+		t.Fatalf("the second request lost its text: %s", sent[2])
 	}
+	t.Logf("after the refusals: shapeRefs unfit=%v", !sv.fits("nas", shapeRefs, provider.Anthropic))
 	// learned: a fresh conversation goes without one from the start
 	post(reporterRefsOnly("nas/q"))
-	if got := bv.sent(); len(got) != 4 || strings.Contains(got[3], `"tool_reference"`) {
+	if got := bv.sent(); len(got) != 4 || hasResultRefs([]byte(got[3])) {
 		t.Fatalf("after the refusal the bridge was sent %q", got[3])
 	}
 }

@@ -159,11 +159,11 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 		if hasResultRefs(sent) && !(deferredRefused.Match(errBody) && hasDeferredTools(sent)) {
 			mark(shapeRefs)
 		}
+	}
 	// the same shape refused in words that name no block: a bridge reads a
 	// top-level tool_reference and refuses one in a tool_result
 	if itemTypeRefused.Match(errBody) && hasResultRefs(body) {
 		mark(shapeRefs)
-	}
 	}
 	// a role refused at a message that is a system one, counted in the
 	// messages as they were sent; a refusal naming a user or assistant

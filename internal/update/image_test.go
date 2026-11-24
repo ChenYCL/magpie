@@ -27,7 +27,9 @@ func TestImageIsTheReleasesOwnTag(t *testing.T) {
 	if !regexp.MustCompile(`V="\$\{GITHUB_REF_NAME#v\}"`).Match(y) || !regexp.MustCompile(`TAGS=\(-t "\$IMAGE:\$V"\)`).Match(y) {
 		t.Error("docker.yml no longer tags each release's image with its version; Image names a tag that isn't written")
 	}
-	if !regexp.MustCompile(`IMAGE: ghcr\.io/\$\{\{ github\.repository_owner \}\}/magpie`).Match(y) || ImageRepo != "ghcr.io/yetone/magpie" {
+	if (!regexp.MustCompile(`IMAGE: ghcr\.io/\$\{\{ github\.repository_owner \}\}/magpie`).Match(y) &&
+		!regexp.MustCompile(`IMAGE=ghcr\.io/\$\{GITHUB_REPOSITORY_OWNER,,\}/magpie`).Match(y)) ||
+		ImageRepo != "ghcr.io/yetone/magpie" {
 		t.Error("the image docker.yml pushes isn't ImageRepo")
 	}
 }

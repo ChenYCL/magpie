@@ -1,6 +1,25 @@
 <!-- reviewed-through: e297a8ab2 (2026-10-13 23:30 +0800) -->
 
 
+**An upstream's refusal of a request's field is not always a 400, and the
+learning that strips a refused field reads only badRequest.**
+- A client sent an earlier turn's thinking as OpenRouter's entries list
+  under `reasoning`; the relay in front of DeepSeek's API answers that with
+  a 500 of its own — "json: cannot unmarshal array into Go struct field
+  …reasoning of type string". `refusedInMessages` only looks at 400, so
+  nothing was learned and the same request failed on every turn after
+  (505 in a day, three tries each).
+- Fix the shape before the ask, not the refusal after it: `reasoningAsContent`
+  puts the entries' text in the `reasoning_content` every Chat server reads
+  and leaves the list out, unconditionally, so no upstream is ever sent a
+  list it might read as a string.
+- Tell a "not a 400" refusal from a server fault by the body: a Go
+  unmarshal error naming a request field is the upstream reading the
+  request, not the model failing.
+- Seen 1× (2026-11-24).
+
+
+
 **A merge that takes one side of a conflict takes that side's whole hunk,
 including the declarations the other side's new code needs.**
 - Merging upstream's 2,338 commits over this fork (2026-11-23), the

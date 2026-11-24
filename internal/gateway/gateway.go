@@ -7590,6 +7590,20 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			}
 		}
 	}
+	// a relay that fails to read the whole reply it was given, and streams
+	// the same request without trouble (unreadableWhole): asked streamed
+	// and translated, as a backend that only streams is, and so from then
+	// on
+	if gather == nil && res.StatusCode >= 400 {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		res.Body.Close()
+		res.Body = io.NopCloser(bytes.NewReader(b))
+		if unreadableWhole(res.StatusCode, proto, body, b) {
+			res.Body.Close()
+			s.markUnfit(p.ID, streamOnlyRefused(model), proto)
+			return res.StatusCode, p.Name + ": " + provider.APIError(b, res.Status), false
+		}
+	}
 	// a vendor that turns away the fields it doesn't know (Mistral's
 	// extra_forbidden for OpenCode's store, #393) is asked again without
 	// the optional ones it named, and not sent them again once that works

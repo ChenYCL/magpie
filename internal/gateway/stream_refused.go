@@ -21,3 +21,17 @@ func streamOnlyRefused(model string) string { return "stream only\x00" + model }
 func refusesWhole(proto provider.Protocol, body, reply []byte) bool {
 	return (proto == provider.Chat || proto == provider.Responses) && !streamOf(body) && provider.StreamRequired(wordsOf(reply))
 }
+
+// unreadableWhole is whether a reply is a relay failing to read the whole
+// reply it was given, while the client's body asked for one: sego's
+// new-api answers a completed reply whose reasoning is a list of entries,
+// not one string — "json: cannot unmarshal array into Go struct field
+// …reasoning of type string", under its own type "bad_response_body" — and
+// streams the very same request without trouble. Asked streamed and
+// translated, it answers: as a backend that only streams is (refusesWhole).
+func unreadableWhole(status int, proto provider.Protocol, body, reply []byte) bool {
+	if (proto != provider.Chat && proto != provider.Responses) || streamOf(body) || status < 400 {
+		return false
+	}
+	return provider.WholeReplyUnreadable(reply)
+}

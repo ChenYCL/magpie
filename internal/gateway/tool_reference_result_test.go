@@ -252,7 +252,7 @@ func (v *bridgeVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	v.bodies = append(v.bodies, string(b))
 	v.mu.Unlock()
 	var m struct {
-		Model   string `json:"model"`
+		Model    string `json:"model"`
 		Messages []struct {
 			Content []struct {
 				Type    string `json:"type"`

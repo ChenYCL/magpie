@@ -238,7 +238,6 @@ func ContainerHostURL() string {
 	return Scheme() + "://" + net.JoinHostPort(gw, Port())
 }
 
-
 // routeTable is Linux's IPv4 routing table; a variable for the tests.
 var routeTable = func() string {
 	b, _ := os.ReadFile("/proc/net/route")

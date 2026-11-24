@@ -250,28 +250,28 @@ var cliForRoute = map[string]string{
 }
 
 var notYet = map[string]string{
-	"GET /api/redteam":                           X, // redteam_api.go
-	"GET /api/redteam/report":                    X, // redteam_api.go
-	"POST /api/sandbox/save":                     X, // sandbox_api.go; on|off sets the switch alone
-	"POST /api/sandbox/try":                      X, // sandbox_api.go
-	"POST /api/sandbox/reset":                    X, // sandbox_api.go
-	"GET /api/gateway-plugins":                   X, // gatewayplugins_api.go
-	"POST /api/gateway-plugins/save":             X, // gatewayplugins_api.go
-	"POST /api/gateway-plugins/remove":           X, // gatewayplugins_api.go
-	"POST /api/gateway-plugins/try":              X, // gatewayplugins_api.go
-	"GET /api/presets":                           X, // presets_api.go; `magpie presets` is the providers'
-	"POST /api/presets/save":                     X, // presets_api.go
-	"POST /api/presets/copy":                     X, // presets_api.go
-	"POST /api/presets/reset":                    X, // presets_api.go
-	"POST /api/presets/remove":                   X, // presets_api.go
-	"POST /api/presets/default":                  X, // presets_api.go
-	"POST /api/presets/exclude":                  X, // presets_api.go
-	"POST /api/presets/try":                      X, // presets_api.go
-	"GET /api/providers/{id}/pool":               X, // presets_api.go
-	"POST /api/providers/{id}/pool/rest":         X, // presets_api.go
-	"GET /api/model-probe":                       X, // modelprobe_api.go
-	"POST /api/model-probe/run":                  X, // modelprobe_api.go
-	"POST /api/model-probe/save":                 X, // modelprobe_api.go
+	"GET /api/redteam":                           X,  // redteam_api.go
+	"GET /api/redteam/report":                    X,  // redteam_api.go
+	"POST /api/sandbox/save":                     X,  // sandbox_api.go; on|off sets the switch alone
+	"POST /api/sandbox/try":                      X,  // sandbox_api.go
+	"POST /api/sandbox/reset":                    X,  // sandbox_api.go
+	"GET /api/gateway-plugins":                   X,  // gatewayplugins_api.go
+	"POST /api/gateway-plugins/save":             X,  // gatewayplugins_api.go
+	"POST /api/gateway-plugins/remove":           X,  // gatewayplugins_api.go
+	"POST /api/gateway-plugins/try":              X,  // gatewayplugins_api.go
+	"GET /api/presets":                           X,  // presets_api.go; `magpie presets` is the providers'
+	"POST /api/presets/save":                     X,  // presets_api.go
+	"POST /api/presets/copy":                     X,  // presets_api.go
+	"POST /api/presets/reset":                    X,  // presets_api.go
+	"POST /api/presets/remove":                   X,  // presets_api.go
+	"POST /api/presets/default":                  X,  // presets_api.go
+	"POST /api/presets/exclude":                  X,  // presets_api.go
+	"POST /api/presets/try":                      X,  // presets_api.go
+	"GET /api/providers/{id}/pool":               X,  // presets_api.go
+	"POST /api/providers/{id}/pool/rest":         X,  // presets_api.go
+	"GET /api/model-probe":                       X,  // modelprobe_api.go
+	"POST /api/model-probe/run":                  X,  // modelprobe_api.go
+	"POST /api/model-probe/save":                 X,  // modelprobe_api.go
 	"POST /api/agent-fast":                       A,  // agent_models.go
 	"POST /api/agent-models/{id}":                A,  // agent_models.go
 	"GET /api/agents/cli":                        A,  // api.go

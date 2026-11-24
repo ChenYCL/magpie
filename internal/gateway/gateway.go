@@ -772,6 +772,7 @@ func (s *Server) record(c Call) {
 // The window's Agent presets page reads it, which is why the record comes
 // through core rather than from a plugin package core may not link.
 var PresetsRecent func() any
+
 // failedCallLine is the app.log line of a call that failed: its status,
 // or a 200 whose reply was cut, canceled or failed on its stream. Every
 // failure was the Routing page's and the usage ledger's alone, so a

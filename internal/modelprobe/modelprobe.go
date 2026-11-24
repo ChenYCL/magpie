@@ -514,9 +514,9 @@ func setStep(s string) {
 // the order a request falls back through them. A member of a group of
 // groups is named by its own group first.
 type Route struct {
-	Group   string   `json:"group"`   // the group's id, without "group/"
+	Group   string   `json:"group"`          // the group's id, without "group/"
 	Name    string   `json:"name,omitempty"` // the group's name, as the window shows it
-	Members []string `json:"members"` // "provider/model", in order
+	Members []string `json:"members"`        // "provider/model", in order
 }
 
 // RoutesFor is every routing group that carries id, outermost groups first,

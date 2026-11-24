@@ -7230,6 +7230,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// a turn the client cut off before it said anything, which
 		// DeepSeek and Kimi turn every later request away for (#2599)
 		body = silentAssistantsOut(body)
+		// an earlier turn's thinking a client sent as OpenRouter's entries
+		// list rather than one string, which a relay in front of a server
+		// that reads reasoning as a string turns the whole request away
+		// for (reasoningAsContent)
+		body = reasoningAsContent(body)
 		// a call no tool message answers, or an answer to no call, which
 		// Kimi and OpenAI turn the whole request away for: what a fork
 		// at an earlier turn or a stopped reply leaves (Paidaixinbao on X)

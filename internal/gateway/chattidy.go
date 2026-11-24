@@ -798,7 +798,10 @@ func (t *chatWhole) flush() []byte {
 var messageReasoning = []string{"reasoning_content", "reasoning", "reasoning_details"}
 
 // reasoningText is the thinking a message carries in messageReasoning:
-// reasoning_content, else reasoning, else reasoning_details' text.
+// reasoning_content, else reasoning, else reasoning_details' text. Each of
+// the first two may be the entries list rather than one string
+// (reasoningEntries' text), as a client that sends OpenRouter's shape under
+// reasoning does.
 func reasoningText(m map[string]json.RawMessage) string {
 	for _, f := range messageReasoning[:2] {
 		var s string
@@ -806,13 +809,27 @@ func reasoningText(m map[string]json.RawMessage) string {
 			return s
 		}
 	}
-	var details []struct {
+	for _, f := range messageReasoning[:2] {
+		if t := reasoningEntries(m[f]); t != "" {
+			return t
+		}
+	}
+	return reasoningEntries(m["reasoning_details"])
+}
+
+// reasoningEntries is the text a thinking field sent as a list of typed
+// entries carries — {"type":"reasoning.text","text":"…"}, OpenRouter's
+// reasoning_details, which a client sends under reasoning too.
+func reasoningEntries(raw json.RawMessage) string {
+	var entries []struct {
 		Text    string `json:"text"`
 		Summary string `json:"summary"`
 	}
-	decodeJSON(m["reasoning_details"], &details)
+	if len(raw) == 0 || decodeJSON(raw, &entries) != nil {
+		return ""
+	}
 	var b strings.Builder
-	for _, d := range details {
+	for _, d := range entries {
 		if d.Text != "" {
 			b.WriteString(d.Text)
 		} else {
@@ -820,6 +837,37 @@ func reasoningText(m map[string]json.RawMessage) string {
 		}
 	}
 	return b.String()
+}
+
+// reasoningAsContent leaves a message's thinking that isn't one string —
+// the entries list above — as the reasoning_content every Chat server
+// reads: a relay in front of one that unmarshals reasoning into a string
+// turns the whole request away with a 500 of its own ("cannot unmarshal
+// array into Go struct field …reasoning of type string"), which no retry
+// clears, as another vendor's reasoning_details is left out
+// (reasoningDetailsAsContent).
+func reasoningAsContent(body []byte) []byte {
+	return editMessages(body, messageReasoning[:2], func(m map[string]json.RawMessage) bool {
+		listed := false
+		for _, f := range messageReasoning[:2] {
+			if raw, ok := m[f]; ok && len(raw) > 0 && raw[0] == '[' {
+				listed = true
+			}
+		}
+		if !listed {
+			return false
+		}
+		think := reasoningText(m)
+		for _, f := range messageReasoning[:2] {
+			if raw, ok := m[f]; ok && len(raw) > 0 && raw[0] == '[' {
+				delete(m, f)
+			}
+		}
+		if _, ok := m["reasoning_content"]; !ok && think != "" {
+			m["reasoning_content"], _ = marshalPlain(think)
+		}
+		return true
+	})
 }
 
 // noReasoning is the reasoning_content a tool call goes to an upstream

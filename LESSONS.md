@@ -1,6 +1,32 @@
 <!-- reviewed-through: e297a8ab2 (2026-10-13 23:30 +0800) -->
 
 
+**A merge that keeps both sides' words keeps both sides' keys, and the
+window's i18n guards fail on a duplicate rather than a missing one.**
+- The second upstream merge left the core's four language tables with the
+  same key in two blocks (the preset page's "Presets" and the gateway-plugin
+  page's "Presets"), plugin files saying words the core had taken over
+  ("Routing", "Image", "Sandbox"), and one tooltip in app.js that no
+  language had. `node --test internal/gui/tests/i18n-keys.test.cjs` is the
+  check; it runs in the cli job, not in the Go tests.
+- A word two places say belongs in the core's table alone: in a plugin's
+  file it is English wherever that plugin is off.
+- Run the four GUI test files locally before pushing a merge that touches
+  `internal/gui/assets/**.js`: they need only node.
+- Seen 1× (2026-11-24).
+
+
+**A registry's naming rule is part of the pipeline, and only the pipeline
+sees it.** The Docker workflow had been red on every push because the image
+name was built from `github.repository_owner`, which here is `ChenYCL`, and
+ghcr takes a lowercase repository. No local build notices: `docker build`
+takes the tag it is given. Read the first failing step of each red run
+before assuming the code is at fault — `gofmt -l` and the tag rule were two
+of the four, and neither ran any test.
+- Seen 1× (2026-11-24).
+
+
+
 **An upstream's refusal of a request's field is not always a 400, and the
 learning that strips a refused field reads only badRequest.**
 - A client sent an earlier turn's thinking as OpenRouter's entries list

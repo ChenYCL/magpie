@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // The broker: the one program with a container engine's socket. magpie
@@ -109,7 +110,7 @@ func (b *Broker) list(rw http.ResponseWriter, r *http.Request) {
 // image again. A box left by a magpie that died mid-command goes here too.
 func (b *Broker) reset(rw http.ResponseWriter, r *http.Request) {
 	label := "magpie-sandbox=1"
-	out, err := exec.CommandContext(r.Context(), b.Engine, "ps", "-aq", "--filter", "label="+label).Output()
+	out, err := proc.CommandContext(r.Context(), b.Engine, "ps", "-aq", "--filter", "label="+label).Output()
 	if err != nil {
 		httpError(rw, http.StatusInternalServerError, err)
 		return
@@ -117,7 +118,7 @@ func (b *Broker) reset(rw http.ResponseWriter, r *http.Request) {
 	ids := strings.Fields(string(out))
 	removed, failed := 0, []string{}
 	for _, id := range ids {
-		if o, err := exec.CommandContext(r.Context(), b.Engine, "rm", "-f", id).CombinedOutput(); err != nil {
+		if o, err := proc.CommandContext(r.Context(), b.Engine, "rm", "-f", id).CombinedOutput(); err != nil {
 			failed = append(failed, id+": "+strings.TrimSpace(string(o)))
 			continue
 		}
@@ -172,7 +173,7 @@ func (b *Broker) run(ctx context.Context, image, command string) (Result, error)
 	}
 	args = append(args, image, "sh", "-c", command)
 
-	cmd := exec.CommandContext(ctx, b.Engine, args...)
+	cmd := proc.CommandContext(ctx, b.Engine, args...)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &capWriter{w: &stdout, left: outputCap}
 	cmd.Stderr = &capWriter{w: &stderr, left: outputCap}

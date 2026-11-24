@@ -184,7 +184,7 @@ func PublicHost() string {
 // NAS panels offer) has the host's own addresses, and they are said as
 // they are.
 func ContainerAddrs() bool {
-	return publicURL() == "" && InContainer() && !hostNetwork(ifaceNames())
+	return publicURL() == "" && inThisContainer() && !hostNetwork(ifaceNames())
 }
 
 // hostNetwork: the interfaces names are the host's, not a container's own:
@@ -277,6 +277,12 @@ func defaultGateway(table string) string {
 // its binary. InContainer is that answer; a variable so a test can say
 // where the binary runs.
 var InContainer = func() bool { return lazyCatURL() != "" || inContainer("/") }
+
+// inThisContainer is inContainer("/") alone, which the addresses said to be
+// a container's go by: a LazyCat app's are its domain's, not its container's.
+// A variable for the tests, apart from InContainer so one can be said without
+// the other.
+var inThisContainer = func() bool { return inContainer("/") }
 
 // inContainer: the system under root is a container's — Docker's or
 // Podman's marker file, a container runtime in PID 1's cgroup, a

@@ -3,10 +3,11 @@ package presets
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 	"strings"
 
 	"github.com/tidwall/gjson"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Apply edits an agent's request body with a preset, in the agent's own
@@ -468,9 +469,9 @@ func onlySpaces(s string) bool { return strings.TrimSpace(s) == "" }
 // <path>". Kept here as the same patterns so a context patch names what
 // the gateway counts as memory.
 var (
-	contentsOf       = regexp.MustCompile(`(?m)^Contents of (\S.*?) \(([^()\n]*(?:\([^()\n]*\)[^()\n]*)*)\):[ \t]*$`)
-	instructionsFrom = regexp.MustCompile(`(?m)^Instructions from: (\S.*?)[ \t]*$`)
-	agentsFor        = regexp.MustCompile(`^# (\S+\.md) instructions for (\S.*?)[ \t]*\n`)
+	contentsOf       = lazyre.New(`(?m)^Contents of (\S.*?) \(([^()\n]*(?:\([^()\n]*\)[^()\n]*)*)\):[ \t]*$`)
+	instructionsFrom = lazyre.New(`(?m)^Instructions from: (\S.*?)[ \t]*$`)
+	agentsFor        = lazyre.New(`^# (\S+\.md) instructions for (\S.*?)[ \t]*\n`)
 )
 
 // compactedNote stands in the prompt where an instruction file's text was,

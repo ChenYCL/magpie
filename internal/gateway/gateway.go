@@ -3812,6 +3812,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	resealed := 0    // what of the conversation another account sealed was taken out: its reasoning, then its compaction
 	repicked := 0    // times Copilot's Auto was asked again for a model the account is served
 	floored := false // the reply's length raised to what the provider takes
+	capped := false  // the reply's length lowered to what the provider's model takes (failCap)
 	plainFor := ""   // the account and model asked again without effort updates (#617)
 	// the account and model asked again for a reply that fits the window
 	// the prompt leaves, and how long that is (roomCap)
@@ -5081,6 +5082,20 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			if b, ok := withTokenFloor(body, tokenFloor(hw.errBody())); ok {
 				floored, body = true, b
 				try.Fail = failFloor
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+				i--
+				continue
+			}
+		}
+		if !capped && !hw.passing && hw.code() == 400 {
+			// asked for more tokens than this provider's model gives
+			// (a group's course sends one model's window to a member
+			// that takes less: Claude Code's 64K to a relay's 32K). The
+			// request is asked again for the most the model gives — the
+			// original is kept for the tries after, which may take it
+			if b, ok := withTokenCap(body, tokenCap(hw.errBody())); ok {
+				capped, body = true, b
+				try.Fail = failCap
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 				i--
 				continue

@@ -141,3 +141,77 @@ func TestTooFewTokensSaidWithSigns(t *testing.T) {
 		}
 	}
 }
+
+func TestTokenCap(t *testing.T) {
+	for msg, want := range map[string]int{
+		// the relay's words that began it (色哥's new-api, 11-26)
+		`{"error":{"message":"The requested 'max_tokens' of 64000 exceeds the maximum allowed for this model, which is 32768. Please reduce 'max_tokens'."}}`: 32768,
+		`The requested 'max_tokens' of 64000 exceeds the maximum allowed for this model, which is 32768`:                                                      32768,
+		`max_tokens: 64000 exceeds the maximum allowed of 8192`:                                                                                               8192,
+		`The requested max_tokens of 100000 exceeds this model's maximum of 16384`:                                                                            16384,
+		`max_tokens exceeds maximum allowed: got 64000, maximum 32768`:                                                                                        32768,
+		// not about the reply's length, or naming the request's own number
+		`max_tokens must be greater than 2`:                                          0,
+		`messages: at least 1 message is required`:                                   0,
+		`Input length 2000 exceeds the maximum allowed input length of 1000 tokens.`: 0,
+		`"max_tokens": 10`: 0,
+	} {
+		if got := tokenCap([]byte(msg)); got != want {
+			t.Errorf("%s: %d, want %d", msg, got, want)
+		}
+	}
+}
+
+// A provider that turns away a request for a longer reply than its model
+// gives (a group's course sends Claude Code's 64K window to a relay's
+// DeepSeek of 32K, 11-26) is asked again for the most it gives, and the
+// app gets a reply.
+func TestTooManyTokensAskedAgain(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	var asked []int
+	capped := true
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var q struct {
+			MaxTokens int `json:"max_tokens"`
+		}
+		json.NewDecoder(r.Body).Decode(&q)
+		asked = append(asked, q.MaxTokens)
+		if capped && q.MaxTokens > 32768 {
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"error":{"message":"The requested 'max_tokens' of 64000 exceeds the maximum allowed for this model, which is 32768. Please reduce 'max_tokens'.","type":"invalid_request_error"}}`)
+			return
+		}
+		io.WriteString(w, `{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "bai", Name: "Bai", Key: "k", Models: []string{"m1"}, Chat: up.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	code, body := post(t, "/v1/chat/completions", `{"model":"bai/m1","max_tokens":64000,"messages":[{"role":"user","content":"hi"}]}`)
+	if code != 200 || !strings.Contains(body, `"ok"`) {
+		t.Fatalf("status %d: %s", code, body)
+	}
+	if len(asked) != 2 || asked[0] != 64000 || asked[1] != 32768 {
+		t.Fatalf("asked for %v tokens", asked)
+	}
+
+	// the cap isn't remembered across requests: the next one asks afresh
+	// for what the client asked for (64000), in case the refusal was the
+	// provider's moment's — and the provider, well again (capped off),
+	// answers it
+	asked, capped = nil, false
+	code, body = post(t, "/v1/chat/completions", `{"model":"bai/m1","max_tokens":64000,"messages":[{"role":"user","content":"hi"}]}`)
+	if code != 200 || !strings.Contains(body, `"ok"`) {
+		t.Fatalf("status %d: %s", code, body)
+	}
+	if len(asked) != 1 || asked[0] != 64000 {
+		t.Fatalf("asked for %v tokens", asked)
+	}
+	// and a request that didn't ask for a length goes as it came
+	asked = nil
+	code, _ = post(t, "/v1/chat/completions", `{"model":"bai/m1","messages":[{"role":"user","content":"hi"}]}`)
+	if code != 200 || len(asked) != 1 {
+		t.Fatalf("%d after %v", code, asked)
+	}
+}

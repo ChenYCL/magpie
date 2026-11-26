@@ -467,6 +467,10 @@ const (
 	// failFloor: the request asked for a shorter reply than the provider
 	// gives, and is sent again asking for the least it takes
 	failFloor = "floor"
+	// failCap: the request asked for a longer reply than the provider
+	// gives (a group's course sends one model's window to a member that
+	// takes less), and is sent again asking for the most it takes
+	failCap = "cap"
 	// failSight: the model turned an image away (imageRefused), and is
 	// asked again with the request's images described (refuseSight)
 	failSight = "sight"
